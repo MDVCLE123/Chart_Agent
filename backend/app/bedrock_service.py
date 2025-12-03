@@ -117,64 +117,88 @@ class BedrockService:
         conditions_text = "\n".join([
             f"- {c.display} (Status: {c.clinical_status}, Onset: {c.onset_date})"
             for c in patient_data.conditions
-        ]) if patient_data.conditions else "None documented"
+        ]) if patient_data.conditions else "- None documented"
         
         # Format medications
         medications_text = "\n".join([
-            f"- {m.display} ({m.dosage if m.dosage else 'Dosage not specified'})"
+            f"- {m.display} {m.dosage if m.dosage else ''}"
             for m in patient_data.medications
-        ]) if patient_data.medications else "None documented"
+        ]) if patient_data.medications else "- None documented"
         
-        # Format recent labs
+        # Format recent labs with abnormal flags
         observations_text = "\n".join([
-            f"- {o.display}: {o.value} {o.unit} on {o.date[:10] if o.date else 'Unknown'}" + 
-            (" [ABNORMAL]" if o.abnormal else "")
+            f"- {o.display}: {o.value} {o.unit} ({o.date[:10] if o.date else 'Unknown'})" + 
+            (" [ABNORMAL]" if o.abnormal else " [NORMAL]")
             for o in patient_data.observations[:10]
-        ]) if patient_data.observations else "No recent labs"
+        ]) if patient_data.observations else "- No recent labs"
         
-        # Format allergies
+        # Format allergies with severity
         allergies_text = "\n".join([
-            f"- {a.display} (Criticality: {a.criticality}, Reaction: {a.reaction})"
+            f"- ⚠️ {a.display} ({a.criticality.upper() if a.criticality else 'UNKNOWN'} criticality) - {a.reaction or 'Reaction not specified'}"
             for a in patient_data.allergies
-        ]) if patient_data.allergies else "No known allergies"
+        ]) if patient_data.allergies else "- No known allergies (NKDA)"
         
         # Format recent encounters
         encounters_text = "\n".join([
-            f"- {e.date[:10] if e.date else 'Unknown date'}: {e.type} - {e.reason}"
+            f"- {e.date[:10] if e.date else 'Unknown date'}: {e.type} - {e.reason or 'Reason not documented'}"
             for e in patient_data.encounters[:5]
-        ]) if patient_data.encounters else "No recent visits documented"
+        ]) if patient_data.encounters else "- No recent visits documented"
         
-        prompt = f"""You are a clinical AI assistant helping a healthcare provider prepare for a patient appointment. Provide a concise, clinically relevant summary.
+        prompt = f"""You are a clinical AI assistant preparing a pre-appointment summary for a healthcare provider. Generate a concise, clinically actionable overview optimized for rapid review.
 
-PATIENT INFORMATION:
-Name: {patient.name}
-Age: {self._calculate_age(patient.dob) if patient.dob else 'Unknown'}
-Gender: {patient.gender or 'Unknown'}
-MRN: {patient.mrn or 'N/A'}
+## PATIENT DEMOGRAPHICS
+- **Name:** {patient.name} | **MRN:** {patient.mrn or 'N/A'}
+- **Age:** {self._calculate_age(patient.dob) if patient.dob else 'Unknown'} | **Gender:** {patient.gender or 'Unknown'}
 
-ACTIVE CONDITIONS:
+## CLINICAL DATA
+
+**Active Conditions:**
 {conditions_text}
 
-RECENT VISITS (Last 6 months):
+**Recent Encounters (Last 6 months):**
 {encounters_text}
 
-CURRENT MEDICATIONS:
+**Current Medications:**
 {medications_text}
 
-RECENT LABS:
+**Recent Laboratory Results:**
 {observations_text}
 
-ALLERGIES:
+**Allergies & Adverse Reactions:**
 {allergies_text}
 
-TASK: Provide a concise clinical summary highlighting:
-1. Key active conditions requiring attention
-2. Recent visit context and outcomes
-3. Relevant lab findings (flag abnormal values)
-4. Current medication regimen (note any high-risk meds)
-5. Important safety considerations (allergies, drug interactions)
+---
 
-Format as bullet points for quick review before the appointment. Focus on actionable clinical information."""
+## REQUIRED OUTPUT
+
+Provide a structured clinical summary using the following format:
+
+**1. Clinical Priority Items**
+- List active conditions requiring monitoring or intervention
+- Flag any concerning trends or uncontrolled conditions
+
+**2. Visit Context**
+- Summarize recent encounters and their outcomes
+- Note any pattern of utilization (e.g., frequent ED visits)
+
+**3. Laboratory Review**
+- Highlight abnormal values with clinical significance
+- Note trends if prior results available
+
+**4. Medication Safety Check**
+- Confirm appropriate dosing given renal function
+- Identify high-risk medications (anticoagulants, diabetes meds, etc.)
+- Flag potential drug-disease interactions
+
+**5. Critical Safety Alerts**
+- Document severe allergies and contraindications
+- Note any drug-drug interactions in current regimen
+
+**Formatting Requirements:**
+- Use bullet points for scannability
+- Bold key clinical terms and abnormal findings
+- Limit to 150-200 words total
+- Prioritize actionable information over background details"""
         
         return prompt
     
@@ -182,21 +206,54 @@ Format as bullet points for quick review before the appointment. Focus on action
         """Build system prompt for chat with patient context."""
         patient = patient_data.patient
         
-        # Abbreviated patient data for context
-        conditions = ", ".join([c.display for c in patient_data.conditions[:5]])
-        medications = ", ".join([m.display for m in patient_data.medications[:5]])
+        # Format patient data for context
+        conditions = ", ".join([c.display for c in patient_data.conditions[:10]]) or "None documented"
+        medications = ", ".join([m.display for m in patient_data.medications[:10]]) or "None documented"
+        allergies = ", ".join([f"{a.display} ({a.criticality})" for a in patient_data.allergies]) or "NKDA"
         
-        system_prompt = f"""You are a clinical AI assistant. The provider is reviewing patient {patient.name}.
+        system_prompt = f"""You are a clinical decision support AI assistant helping a healthcare provider review the medical record for patient {patient.name} (MRN: {patient.mrn or 'N/A'}).
 
-Patient Context:
-- Age: {self._calculate_age(patient.dob) if patient.dob else 'Unknown'}
-- Gender: {patient.gender or 'Unknown'}
-- Key Conditions: {conditions if conditions else 'None documented'}
-- Current Medications: {medications if medications else 'None documented'}
+## PATIENT CONTEXT
 
-You have access to their complete medical record. Answer questions accurately and concisely.
-Cite specific dates and values when relevant. If information is not in the record, say so clearly.
-Focus on providing clinically relevant information to help the provider."""
+- **Age:** {self._calculate_age(patient.dob) if patient.dob else 'Unknown'} | **Gender:** {patient.gender or 'Unknown'}
+- **Active Conditions:** {conditions}
+- **Current Medications:** {medications}
+- **Allergies:** {allergies} [CRITICAL - verify before prescribing]
+
+## YOUR ROLE & CAPABILITIES
+
+You have access to this patient's complete medical record including:
+- Problem list and diagnoses
+- Medication history (active and historical)
+- Laboratory and imaging results
+- Clinical encounters and notes
+- Procedures and immunizations
+
+## RESPONSE REQUIREMENTS
+
+**Always:**
+- Provide accurate, evidence-based clinical information
+- **Cite specific sources:** Include dates, values, and document types (e.g., "HbA1c 7.2% on 2024-01-10" or "Per 2024-02-15 progress note")
+- Use precise medical terminology appropriate for a licensed provider
+- Distinguish between clinical facts and clinical interpretation
+- Prioritize patient safety considerations
+
+**Never:**
+- Make diagnostic conclusions - present data for provider interpretation
+- Recommend specific treatments without caveats about clinical judgment
+- Ignore or downplay allergy information
+- Provide information not present in the medical record
+
+**If information is unavailable:**
+- State clearly: "This information is not documented in the available record"
+- Suggest where the provider might find it (e.g., "Consider ordering [test]" or "May need to obtain records from [source]")
+- Do NOT speculate or fill gaps with general medical knowledge
+
+**Response style:**
+- **Concise:** Answer the specific question asked; avoid unnecessary background
+- **Structured:** Use bullet points or short paragraphs for readability
+- **Contextual:** When relevant, note if findings are abnormal, trending, or require follow-up
+- **Time-aware:** Prioritize recent data but note historical context when clinically relevant"""
         
         return system_prompt
     

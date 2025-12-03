@@ -4,6 +4,20 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 
+class PractitionerBasic(BaseModel):
+    """Basic practitioner information."""
+    id: str
+    name: str
+    prefix: Optional[str] = None  # e.g., "Dr."
+    specialty: Optional[str] = None
+
+
+class PractitionerListResponse(BaseModel):
+    """Response model for practitioner list."""
+    practitioners: List[PractitionerBasic]
+    total: int
+
+
 class PatientBasic(BaseModel):
     """Basic patient information for list view."""
     id: str
@@ -12,6 +26,7 @@ class PatientBasic(BaseModel):
     dob: Optional[str] = None
     gender: Optional[str] = None
     appointment_time: Optional[str] = None
+    general_practitioner_id: Optional[str] = None  # Reference to practitioner
 
 
 class PatientListResponse(BaseModel):

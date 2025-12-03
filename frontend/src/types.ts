@@ -2,6 +2,13 @@
  * TypeScript type definitions
  */
 
+export interface PractitionerBasic {
+  id: string;
+  name: string;
+  prefix?: string;
+  specialty?: string;
+}
+
 export interface PatientBasic {
   id: string;
   name: string;
@@ -9,6 +16,7 @@ export interface PatientBasic {
   dob?: string;
   gender?: string;
   appointment_time?: string;
+  general_practitioner_id?: string;
 }
 
 export interface Condition {

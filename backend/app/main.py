@@ -2,12 +2,13 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from app.config import settings
 from app.models import (
     PatientListResponse, PatientData, SummaryRequest, SummaryResponse,
-    ChatRequest, ChatResponse, ChatMessage, HealthCheckResponse
+    ChatRequest, ChatResponse, ChatMessage, HealthCheckResponse,
+    PractitionerListResponse
 )
 from app.healthlake_client import HealthLakeClient
 from app.bedrock_service import BedrockService
@@ -44,11 +45,24 @@ async def health_check():
     )
 
 
-@app.get("/api/patients", response_model=PatientListResponse)
-async def get_patients(count: int = 50):
-    """Get list of patients."""
+@app.get("/api/practitioners", response_model=PractitionerListResponse)
+async def get_practitioners(count: int = 50):
+    """Get list of practitioners."""
     try:
-        patients = healthlake_client.search_patients(count=count)
+        practitioners = healthlake_client.search_practitioners(count=count)
+        return PractitionerListResponse(
+            practitioners=practitioners,
+            total=len(practitioners)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching practitioners: {str(e)}")
+
+
+@app.get("/api/patients", response_model=PatientListResponse)
+async def get_patients(count: int = 50, practitioner_id: Optional[str] = None):
+    """Get list of patients, optionally filtered by practitioner."""
+    try:
+        patients = healthlake_client.search_patients(count=count, practitioner_id=practitioner_id)
         return PatientListResponse(
             patients=patients,
             total=len(patients)

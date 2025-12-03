@@ -3,7 +3,7 @@
  */
 import axios from 'axios';
 import { config } from '../config';
-import { PatientBasic, PatientData, SummaryResponse, ChatMessage, ChatResponse } from '../types';
+import { PatientBasic, PatientData, SummaryResponse, ChatMessage, ChatResponse, PractitionerBasic } from '../types';
 
 const api = axios.create({
   baseURL: config.apiUrl,
@@ -15,10 +15,22 @@ const api = axios.create({
 
 export const apiService = {
   /**
-   * Get list of patients
+   * Get list of practitioners
    */
-  async getPatients(count: number = 50): Promise<PatientBasic[]> {
-    const response = await api.get(`/api/patients?count=${count}`);
+  async getPractitioners(count: number = 50): Promise<PractitionerBasic[]> {
+    const response = await api.get(`/api/practitioners?count=${count}`);
+    return response.data.practitioners;
+  },
+
+  /**
+   * Get list of patients, optionally filtered by practitioner
+   */
+  async getPatients(count: number = 50, practitionerId?: string): Promise<PatientBasic[]> {
+    let url = `/api/patients?count=${count}`;
+    if (practitionerId) {
+      url += `&practitioner_id=${practitionerId}`;
+    }
+    const response = await api.get(url);
     return response.data.patients;
   },
 

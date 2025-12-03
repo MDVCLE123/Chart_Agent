@@ -9,23 +9,41 @@ from datetime import datetime, timedelta
 
 from app.config import settings
 from app.models import (
-    PatientBasic, Condition, Medication, Observation, 
+    PatientBasic, PractitionerBasic, Condition, Medication, Observation, 
     Allergy, Encounter, PatientData
 )
 
 
 class HealthLakeClient:
-    """Client for interacting with AWS HealthLake FHIR API."""
+    """Client for interacting with AWS HealthLake or public FHIR API."""
     
     def __init__(self):
-        self.endpoint = settings.healthlake_datastore_endpoint.rstrip('/')
-        self.region = settings.aws_region
-        self.session = boto3.Session(
-            aws_access_key_id=settings.aws_access_key_id if settings.aws_access_key_id else None,
-            aws_secret_access_key=settings.aws_secret_access_key if settings.aws_secret_access_key else None,
-            region_name=self.region
-        )
-        self.credentials = self.session.get_credentials()
+        self.demo_mode = settings.use_demo_mode
+        
+        if self.demo_mode:
+            # Use public FHIR server for testing
+            self.endpoint = settings.demo_fhir_server.rstrip('/')
+            print(f"🧪 Demo mode: Using public FHIR server at {self.endpoint}")
+        else:
+            # Use AWS HealthLake
+            self.endpoint = settings.healthlake_datastore_endpoint.rstrip('/')
+            self.region = settings.aws_region
+            self.session = boto3.Session(
+                aws_access_key_id=settings.aws_access_key_id if settings.aws_access_key_id else None,
+                aws_secret_access_key=settings.aws_secret_access_key if settings.aws_secret_access_key else None,
+                region_name=self.region
+            )
+            self.credentials = self.session.get_credentials()
+    
+    def _make_request(self, method: str, url: str, body: str = "") -> requests.Response:
+        """Make a request - signed for HealthLake, plain for demo mode."""
+        if self.demo_mode:
+            # Public FHIR server - no auth needed
+            headers = {"Accept": "application/fhir+json"}
+            return requests.request(method=method, url=url, headers=headers, timeout=30)
+        else:
+            # AWS HealthLake - sign with SigV4
+            return self._sign_request(method, url, body)
     
     def _sign_request(self, method: str, url: str, body: str = "") -> requests.Response:
         """Sign request with AWS SigV4 and execute."""
@@ -39,12 +57,68 @@ class HealthLakeClient:
             data=request.body
         )
     
-    def search_patients(self, count: int = 50) -> List[PatientBasic]:
-        """Search for patients in HealthLake."""
-        url = f"{self.endpoint}/Patient?_count={count}"
+    def search_practitioners(self, count: int = 50) -> List[PractitionerBasic]:
+        """Search for practitioners in FHIR server."""
+        url = f"{self.endpoint}/Practitioner?_count={count}"
         
         try:
-            response = self._sign_request("GET", url)
+            response = self._make_request("GET", url)
+            response.raise_for_status()
+            bundle = response.json()
+            
+            practitioners = []
+            if "entry" in bundle:
+                for entry in bundle["entry"]:
+                    resource = entry.get("resource", {})
+                    practitioners.append(self._parse_practitioner_basic(resource))
+            
+            return practitioners
+        except Exception as e:
+            print(f"Error searching practitioners: {e}")
+            return []
+    
+    def _parse_practitioner_basic(self, resource: Dict[str, Any]) -> PractitionerBasic:
+        """Parse FHIR Practitioner resource to PractitionerBasic."""
+        practitioner_id = resource.get("id", "")
+        
+        # Parse name
+        name = "Unknown"
+        prefix = None
+        if "name" in resource and len(resource["name"]) > 0:
+            name_obj = resource["name"][0]
+            given = " ".join(name_obj.get("given", []))
+            family = name_obj.get("family", "")
+            name = f"{given} {family}".strip()
+            prefixes = name_obj.get("prefix", [])
+            if prefixes:
+                prefix = prefixes[0]
+        
+        # Parse specialty (from qualification)
+        specialty = None
+        if "qualification" in resource:
+            for qual in resource["qualification"]:
+                code = qual.get("code", {})
+                if "text" in code:
+                    specialty = code["text"]
+                    break
+        
+        return PractitionerBasic(
+            id=practitioner_id,
+            name=name,
+            prefix=prefix,
+            specialty=specialty
+        )
+
+    def search_patients(self, count: int = 50, practitioner_id: Optional[str] = None) -> List[PatientBasic]:
+        """Search for patients in FHIR server, optionally filtered by practitioner encounters."""
+        if practitioner_id:
+            # Find patients who have had encounters with this practitioner
+            return self._get_patients_by_practitioner_encounters(practitioner_id, count)
+        else:
+            url = f"{self.endpoint}/Patient?_count={count}"
+        
+        try:
+            response = self._make_request("GET", url)
             response.raise_for_status()
             bundle = response.json()
             
@@ -59,12 +133,46 @@ class HealthLakeClient:
             print(f"Error searching patients: {e}")
             return []
     
+    def _get_patients_by_practitioner_encounters(self, practitioner_id: str, count: int = 50) -> List[PatientBasic]:
+        """Get patients who have had encounters with a specific practitioner."""
+        # Query encounters for this practitioner (using 'practitioner' search param)
+        # Note: HealthLake limits _count to max 100
+        url = f"{self.endpoint}/Encounter?practitioner={practitioner_id}&_count=100"
+        
+        try:
+            response = self._make_request("GET", url)
+            response.raise_for_status()
+            bundle = response.json()
+            
+            # Extract unique patient IDs from encounters
+            patient_ids = set()
+            if "entry" in bundle:
+                for entry in bundle["entry"]:
+                    encounter = entry.get("resource", {})
+                    subject = encounter.get("subject", {})
+                    ref = subject.get("reference", "")
+                    if ref.startswith("Patient/"):
+                        patient_id = ref.replace("Patient/", "")
+                        patient_ids.add(patient_id)
+            
+            # Fetch patient details for each unique patient
+            patients = []
+            for patient_id in list(patient_ids)[:count]:
+                patient = self.get_patient(patient_id)
+                if patient:
+                    patients.append(patient)
+            
+            return patients
+        except Exception as e:
+            print(f"Error getting patients by practitioner encounters: {e}")
+            return []
+    
     def get_patient(self, patient_id: str) -> Optional[PatientBasic]:
         """Get a specific patient by ID."""
         url = f"{self.endpoint}/Patient/{patient_id}"
         
         try:
-            response = self._sign_request("GET", url)
+            response = self._make_request("GET", url)
             response.raise_for_status()
             resource = response.json()
             return self._parse_patient_basic(resource)
@@ -99,7 +207,7 @@ class HealthLakeClient:
         url = f"{self.endpoint}/Condition?patient={patient_id}&clinical-status=active"
         
         try:
-            response = self._sign_request("GET", url)
+            response = self._make_request("GET", url)
             response.raise_for_status()
             bundle = response.json()
             
@@ -121,7 +229,7 @@ class HealthLakeClient:
         url = f"{self.endpoint}/MedicationStatement?patient={patient_id}&status=active"
         
         try:
-            response = self._sign_request("GET", url)
+            response = self._make_request("GET", url)
             response.raise_for_status()
             bundle = response.json()
             
@@ -145,7 +253,7 @@ class HealthLakeClient:
         url = f"{self.endpoint}/Observation?patient={patient_id}&date=ge{six_months_ago}&_count={limit}&_sort=-date"
         
         try:
-            response = self._sign_request("GET", url)
+            response = self._make_request("GET", url)
             response.raise_for_status()
             bundle = response.json()
             
@@ -167,7 +275,7 @@ class HealthLakeClient:
         url = f"{self.endpoint}/AllergyIntolerance?patient={patient_id}"
         
         try:
-            response = self._sign_request("GET", url)
+            response = self._make_request("GET", url)
             response.raise_for_status()
             bundle = response.json()
             
@@ -189,7 +297,7 @@ class HealthLakeClient:
         url = f"{self.endpoint}/Encounter?patient={patient_id}&_count={limit}&_sort=-date"
         
         try:
-            response = self._sign_request("GET", url)
+            response = self._make_request("GET", url)
             response.raise_for_status()
             bundle = response.json()
             
@@ -230,12 +338,20 @@ class HealthLakeClient:
         dob = resource.get("birthDate")
         gender = resource.get("gender")
         
+        # Parse general practitioner reference
+        general_practitioner_id = None
+        if "generalPractitioner" in resource and len(resource["generalPractitioner"]) > 0:
+            ref = resource["generalPractitioner"][0].get("reference", "")
+            if ref.startswith("Practitioner/"):
+                general_practitioner_id = ref.replace("Practitioner/", "")
+        
         return PatientBasic(
             id=patient_id,
             name=name,
             mrn=mrn,
             dob=dob,
-            gender=gender
+            gender=gender,
+            general_practitioner_id=general_practitioner_id
         )
     
     def _parse_condition(self, resource: Dict[str, Any]) -> Optional[Condition]:

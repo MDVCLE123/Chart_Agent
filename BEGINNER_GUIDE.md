@@ -406,7 +406,7 @@ DEBUG=true
 LOG_LEVEL=INFO
 
 # CORS Settings (for local development)
-CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+CORS_ORIGINS=["http://localhost:3000","http://localhost:8000"]
 ```
 
 5. **Important**: Replace `YOUR-DATASTORE-ID` with your actual HealthLake datastore ID from step 1.1

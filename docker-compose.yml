@@ -12,9 +12,11 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - HEALTHLAKE_DATASTORE_ENDPOINT=${HEALTHLAKE_DATASTORE_ENDPOINT}
-      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID:-anthropic.claude-3-7-sonnet-20250219-v1:0}
+      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID:-us.anthropic.claude-sonnet-4-20250514-v1:0}
+      - USE_DEMO_MODE=${USE_DEMO_MODE:-true}
+      - DEMO_FHIR_SERVER=${DEMO_FHIR_SERVER:-https://hapi.fhir.org/baseR4}
       - ENVIRONMENT=development
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:80
+      - CORS_ORIGINS=["http://localhost:3000","http://localhost:80"]
     volumes:
       - ./backend/app:/app/app  # Hot reload for development
     networks:

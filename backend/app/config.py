@@ -12,13 +12,18 @@ class Settings(BaseSettings):
     aws_secret_access_key: str = ""
     
     # HealthLake Configuration
-    healthlake_datastore_endpoint: str
+    healthlake_datastore_endpoint: str = ""
+    
+    # Demo Mode - Use public FHIR server for testing
+    use_demo_mode: bool = True  # Set to False to use HealthLake
+    demo_fhir_server: str = "https://hapi.fhir.org/baseR4"
     
     # Bedrock Configuration
-    bedrock_model_id: str = "anthropic.claude-3-7-sonnet-20250219-v1:0"
+    bedrock_model_id: str = "us.anthropic.claude-sonnet-4-20250514-v1:0"
     
     # Application Configuration
     environment: str = "development"
+    debug: bool = True
     log_level: str = "INFO"
     
     # CORS Configuration
