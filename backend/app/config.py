@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     healthlake_datastore_endpoint: str
     
     # Bedrock Configuration
-    bedrock_model_id: str = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    bedrock_model_id: str = "anthropic.claude-3-7-sonnet-20250219-v1:0"
     
     # Application Configuration
     environment: str = "development"

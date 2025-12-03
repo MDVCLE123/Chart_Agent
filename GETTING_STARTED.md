@@ -9,7 +9,7 @@ A complete, production-ready Chart Preparation Agent with:
 - ✅ Python FastAPI backend with AWS HealthLake and Bedrock integration
 - ✅ React TypeScript frontend with Material-UI
 - ✅ Docker containerization for both services
-- ✅ Complete Terraform infrastructure for AWS deployment
+- ✅ Complete Pulumi infrastructure for AWS deployment (Python!)
 - ✅ Helper scripts for one-command deployment
 - ✅ Epic FHIR sandbox integration ready
 - ✅ Cost-optimized configuration ($0-15/month for development)
@@ -20,8 +20,8 @@ Before you start, make sure you have:
 
 - [ ] AWS Account with admin access
 - [ ] AWS CLI installed and configured (`aws configure`)
+- [ ] Pulumi CLI installed ([install guide](https://www.pulumi.com/docs/get-started/install/))
 - [ ] Docker installed and running
-- [ ] Terraform installed (v1.0+)
 - [ ] Node.js 18+ installed
 - [ ] Python 3.11+ installed
 - [ ] Git (for version control)
@@ -31,10 +31,14 @@ Before you start, make sure you have:
 ### Step 1: AWS Setup (5 minutes)
 
 ```bash
-# 1. Set up Terraform backend
-./scripts/setup-terraform-backend.sh
+# 1. Install and login to Pulumi
+brew install pulumi  # macOS
+pulumi login         # Use Pulumi Cloud (free) or --local
 
-# 2. Follow the AWS Setup Guide to:
+# 2. Setup Pulumi infrastructure
+./scripts/setup-pulumi.sh
+
+# 3. Follow the AWS Setup Guide to:
 #    - Create HealthLake data store
 #    - Enable Bedrock access
 #    See: docs/AWS_SETUP.md
@@ -125,16 +129,14 @@ Chart_Agent/
 │   ├── Dockerfile
 │   └── package.json
 │
-├── terraform/            # Infrastructure as Code
-│   ├── main.tf                  # Main configuration
-│   ├── vpc.tf                   # Network infrastructure
-│   ├── ecs.tf                   # ECS/Fargate
-│   ├── alb.tf                   # Load balancer
-│   ├── dev.tfvars               # Dev config (minimal cost)
-│   └── testing.tfvars           # Test config (full stack)
+├── infrastructure/       # Pulumi Infrastructure (Python)
+│   ├── __main__.py              # Infrastructure code
+│   ├── Pulumi.yaml              # Project definition
+│   ├── Pulumi.dev.yaml          # Dev config (minimal cost)
+│   └── Pulumi.testing.yaml      # Test config (full stack)
 │
 ├── scripts/              # Helper scripts
-│   ├── setup-terraform-backend.sh
+│   ├── setup-pulumi.sh
 │   ├── start-dev.sh
 │   ├── start-testing.sh
 │   ├── teardown.sh
@@ -296,12 +298,13 @@ Integrate AWS Cognito for provider authentication:
 - Have you requested access to Claude models?
 - Is the model ID correct?
 
-### Terraform errors
+### Pulumi errors
 
 **Check**:
-- Is Terraform backend set up? Run `./scripts/setup-terraform-backend.sh`
-- Are AWS credentials valid?
-- Check `terraform/dev.tfvars` configuration
+- Are AWS credentials valid? Run `aws sts get-caller-identity`
+- Check Pulumi stack status: `pulumi stack --show-urns`
+- View stack outputs: `pulumi stack output`
+- Check Pulumi logs: `pulumi logs`
 
 ## Support & Resources
 
@@ -318,7 +321,9 @@ Integrate AWS Cognito for provider authentication:
 - [Amazon Bedrock Docs](https://docs.aws.amazon.com/bedrock/)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [React Documentation](https://react.dev/)
-- [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
+- [Pulumi Documentation](https://www.pulumi.com/docs/)
+- [Pulumi AWS Guide](https://www.pulumi.com/docs/clouds/aws/get-started/)
+- [Pulumi Python](https://www.pulumi.com/docs/languages-sdks/python/)
 
 ## Cost Summary
 

@@ -59,7 +59,7 @@ aws healthlake describe-fhir-datastore \
 1. Navigate to [Amazon Bedrock Console](https://console.aws.amazon.com/bedrock)
 2. Click "Model access" in the left sidebar
 3. Click "Request model access"
-4. Find "Claude 3.5 Sonnet" by Anthropic
+4. Find "Claude 3.7 Sonnet" by Anthropic
 5. Check the box next to it
 6. Click "Request model access"
 7. Wait for approval (usually instant for Claude models)
@@ -74,7 +74,7 @@ aws bedrock list-foundation-models \
   --query "modelSummaries[?contains(modelId, 'claude')].{Name:modelName,ID:modelId}" \
   --output table
 
-# Model ID to use: anthropic.claude-3-5-sonnet-20241022-v2:0
+# Model ID to use: anthropic.claude-3-7-sonnet-20250219-v1:0
 ```
 
 ## Step 4: Create IAM Role for Development
@@ -154,7 +154,7 @@ import json
 bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
 
 response = bedrock.invoke_model(
-    modelId='anthropic.claude-3-5-sonnet-20241022-v2:0',
+    modelId='anthropic.claude-3-7-sonnet-20250219-v1:0',
     body=json.dumps({
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": 100,
@@ -175,7 +175,7 @@ Update `backend/.env`:
 ```bash
 AWS_REGION=us-east-1
 HEALTHLAKE_DATASTORE_ENDPOINT=https://healthlake.us-east-1.amazonaws.com/datastore/<datastore-id>/r4/
-BEDROCK_MODEL_ID=anthropic.claude-3-5-sonnet-20241022-v2:0
+BEDROCK_MODEL_ID=anthropic.claude-3-7-sonnet-20250219-v1:0
 ```
 
 ## Step 7: Set Up Billing Alerts (Recommended)

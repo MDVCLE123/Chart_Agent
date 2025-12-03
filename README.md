@@ -2,20 +2,35 @@
 
 AI-powered chart preparation system for healthcare providers using AWS HealthLake, Bedrock (Claude 3.5 Sonnet), and FHIR data.
 
+## 🎓 New to Development?
+
+**Start here**: [BEGINNER_GUIDE.md](BEGINNER_GUIDE.md) - Complete step-by-step guide with detailed explanations of every command and concept. Perfect if you're new to:
+- Programming
+- AWS
+- Docker
+- Terminal/Command Line
+
 ## Quick Start
 
 ### Prerequisites
 - AWS Account with admin access
 - AWS CLI configured (`aws configure`)
+- Pulumi CLI installed ([get Pulumi](https://www.pulumi.com/docs/get-started/install/))
 - Docker installed
-- Terraform installed
 - Node.js 18+ and Python 3.11+
 
 ### Initial Setup
 
-1. **Set up Terraform backend** (one-time):
+1. **Install and configure Pulumi**:
 ```bash
-./scripts/setup-terraform-backend.sh
+# Install Pulumi (macOS)
+brew install pulumi
+
+# Login to Pulumi (free for individuals)
+pulumi login
+
+# Or use local storage
+pulumi login --local
 ```
 
 2. **Create AWS HealthLake data store** (via AWS Console):
@@ -88,7 +103,7 @@ Tear down all AWS infrastructure:
 - **Backend**: Python FastAPI
 - **AI**: AWS Bedrock (Claude 3.5 Sonnet)
 - **FHIR Data**: AWS HealthLake
-- **Infrastructure**: AWS ECS/Fargate, VPC, ALB (managed by Terraform)
+- **Infrastructure**: AWS ECS/Fargate, VPC, ALB (managed by Pulumi Python)
 
 ## Project Structure
 
@@ -96,7 +111,7 @@ Tear down all AWS infrastructure:
 Chart_Agent/
 ├── backend/           # Python FastAPI backend
 ├── frontend/          # React TypeScript frontend
-├── terraform/         # Infrastructure as Code
+├── infrastructure/    # Pulumi Infrastructure (Python)
 ├── scripts/           # Helper scripts
 └── docs/             # Additional documentation
 ```

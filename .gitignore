@@ -45,12 +45,12 @@ build/
 .DS_Store
 Thumbs.db
 
-# Terraform
-terraform/.terraform/
-terraform/*.tfstate
-terraform/*.tfstate.*
-terraform/.terraform.lock.hcl
-terraform/terraform.tfvars
+# Pulumi
+infrastructure/.pulumi/
+infrastructure/*.state
+infrastructure/*.state.*
+infrastructure/venv/
+infrastructure/.venv/
 
 # Logs
 *.log

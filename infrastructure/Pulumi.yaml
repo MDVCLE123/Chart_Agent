@@ -1,0 +1,4 @@
+name: chart-agent
+runtime: python
+description: Chart Preparation Agent - AWS Infrastructure
+

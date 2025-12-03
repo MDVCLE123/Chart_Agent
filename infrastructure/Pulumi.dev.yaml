@@ -1,0 +1,8 @@
+config:
+  aws:region: us-east-1
+  chart-agent:environment: dev
+  chart-agent:enableNATGateway: false
+  chart-agent:enableALB: false
+  chart-agent:ecsBackendCount: 0
+  chart-agent:ecsFrontendCount: 0
+

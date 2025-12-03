@@ -1,13 +1,28 @@
 # Chart Preparation Agent - AWS-Native Implementation Plan
 
+> **For Beginners**: This document provides detailed, step-by-step instructions for building a complete healthcare AI application. No prior experience needed! Follow along at your own pace.
+
+## What You're Building
+
+A web application that helps healthcare providers prepare for patient appointments by automatically summarizing patient records using AI. Think of it as an intelligent assistant that reads through medical records and creates a quick summary before a doctor's appointment.
+
 ## Architecture Overview
 
-**Frontend**: React application for provider interface  
-**Backend**: Python (FastAPI) REST API on ECS/Fargate  
-**AI**: AWS Bedrock with Claude 3.5 Sonnet for summarization  
-**FHIR Data**: AWS HealthLake (FHIR R4 compliant data store)  
+**Frontend**: React application for provider interface (the website doctors will use)  
+**Backend**: Python (FastAPI) REST API on ECS/Fargate (the server that handles data)  
+**AI**: AWS Bedrock with Claude 3.7 Sonnet for summarization (AI that reads and summarizes)  
+**FHIR Data**: AWS HealthLake (database with patient medical records)  
 **Infrastructure**: 100% AWS-native solution with containerized deployment  
 **Data Sources**: HealthLake (dev/synthetic) → Epic sandbox → Production EHRs
+
+### Simple Explanation
+- **Frontend** = The website interface doctors see
+- **Backend** = The behind-the-scenes server that processes requests
+- **AI (Claude)** = Artificial intelligence that reads and summarizes medical data
+- **FHIR** = Standard format for healthcare data (like how MP3 is a standard for music)
+- **AWS** = Amazon Web Services - cloud platform hosting everything
+- **Docker** = Packages your app so it runs the same everywhere
+- **Pulumi** = Tool to create and manage AWS infrastructure with code
 
 ## Technical Stack
 
@@ -26,7 +41,7 @@
 
 ### AWS Services (100% AWS-Native)
 - **Amazon HealthLake**: FHIR R4 data store with synthetic patient data
-- **Amazon Bedrock**: Claude 3.5 Sonnet for AI summarization and chat
+- **Amazon Bedrock**: Claude 3.7 Sonnet for AI summarization and chat
 - **ECS/Fargate**: Container orchestration (backend + frontend)
 - **ECR**: Docker image registry
 - **Application Load Balancer**: Route traffic to containers
@@ -44,9 +59,97 @@
 
 ---
 
+## Prerequisites (What You Need First)
+
+### 1. Install Required Software
+
+Before starting, install these tools on your computer:
+
+**Essential Tools:**
+
+1. **Code Editor - VS Code** (Recommended for beginners)
+   - Download: https://code.visualstudio.com/
+   - Why: Easy-to-use editor with helpful features for beginners
+   - After installing, open VS Code and install these extensions:
+     - Python
+   - ESLint
+   - Docker
+   - HashiCorp Pulumi
+
+2. **Git** (Version control)
+   - Download: https://git-scm.com/
+   - Why: Tracks changes to your code
+   - Test it works: Open Terminal/Command Prompt and type: `git --version`
+
+3. **Python 3.11+** (Backend programming language)
+   - Download: https://www.python.org/downloads/
+   - Why: The language your backend server uses
+   - Test it works: `python3 --version` or `python --version`
+
+4. **Node.js 18+** (Frontend tools)
+   - Download: https://nodejs.org/ (get the LTS version)
+   - Why: Needed to build the React website
+   - Test it works: `node --version` and `npm --version`
+
+5. **Docker Desktop** (Containerization)
+   - Download: https://www.docker.com/products/docker-desktop
+   - Why: Packages your app to run consistently everywhere
+   - Test it works: `docker --version`
+
+6. **Pulumi** (Infrastructure management)
+   - macOS: `brew tap hashicorp/tap && brew install hashicorp/tap/pulumi`
+   - Linux: Download from https://www.pulumi.io/downloads
+   - Windows: `choco install pulumi`
+   - Why: Creates AWS resources automatically
+   - Test it works: `pulumi version`
+
+7. **AWS CLI** (Amazon command line tool)
+   - Download: https://aws.amazon.com/cli/
+   - Why: Interact with Amazon Web Services
+   - Test it works: `aws --version`
+
+### 2. Create Accounts
+
+**AWS Account** (Required)
+1. Go to https://aws.amazon.com/
+2. Click "Create an AWS Account"
+3. Follow the signup process (credit card required, but you'll use free tier)
+4. Enable MFA (multi-factor authentication) for security
+5. Cost estimate: $5-15/month during development
+
+**Why you need this:** AWS hosts your application in the cloud
+
+### 3. Configure AWS CLI
+
+After creating your AWS account:
+
+```bash
+# Run this command in Terminal/Command Prompt
+aws configure
+
+# You'll be asked for:
+# - AWS Access Key ID: Get from AWS Console → Security Credentials
+# - AWS Secret Access Key: Get from same place
+# - Default region: Enter "us-east-1"
+# - Default output format: Enter "json"
+```
+
+**Finding Your AWS Keys:**
+1. Log into AWS Console: https://console.aws.amazon.com/
+2. Click your name (top right) → Security Credentials
+3. Scroll to "Access keys" → Create access key
+4. Choose "Command Line Interface (CLI)"
+5. Copy both keys and paste when running `aws configure`
+
+---
+
 ## Implementation Phases
 
 ### Phase 1: AWS Setup & Project Structure
+
+**Time Estimate**: 30-60 minutes  
+**Difficulty**: Beginner-friendly (mostly clicking through AWS console)  
+**What You'll Learn**: How to set up AWS services for healthcare data
 
 **1.1 AWS HealthLake Setup**
 - Create HealthLake data store (FHIR R4)
@@ -57,11 +160,68 @@
 
 **1.2 AWS Bedrock Setup**
 - Enable Amazon Bedrock in your AWS account (us-east-1 or us-west-2)
-- Request access to Claude 3.5 Sonnet model (if not already enabled)
+- Request access to Claude 3.7 Sonnet model (if not already enabled)
 - Create IAM role with `bedrock:InvokeModel` permissions
 - Test Bedrock API with sample prompts
 
-**1.3 Project Structure**
+**1.3 Clone and Set Up Project** (Detailed Steps)
+
+Now let's get the code on your computer!
+
+**Step-by-Step Instructions:**
+
+1. **Open Terminal/Command Prompt**
+   - **Mac**: Press Cmd+Space, type "Terminal", press Enter
+   - **Windows**: Press Win+R, type "cmd", press Enter
+   - **Linux**: Press Ctrl+Alt+T
+
+2. **Navigate to Where You Want the Project**
+   ```bash
+   # Go to your Documents folder (or wherever you keep projects)
+   cd Documents/Projects
+   
+   # If Projects folder doesn't exist, create it:
+   mkdir -p Documents/Projects
+   cd Documents/Projects
+   ```
+
+3. **Download This Project**
+   ```bash
+   # You're already in this project! Skip this step if you can see
+   # the Chart_Agent folder. Otherwise, if starting fresh:
+   git clone <your-repo-url> Chart_Agent
+   cd Chart_Agent
+   ```
+
+4. **Verify Project Structure**
+   ```bash
+   # List files to confirm everything is there
+   ls -la
+   
+   # You should see folders like:
+   # - backend/
+   # - frontend/
+   # - pulumi/
+   # - scripts/
+   # - docs/
+   ```
+
+5. **Open Project in VS Code**
+   ```bash
+   # Open the project in VS Code
+   code .
+   
+   # If 'code' command doesn't work:
+   # - Open VS Code manually
+   # - File → Open Folder
+   # - Navigate to Chart_Agent folder
+   # - Click "Open"
+   ```
+
+**What Just Happened?**
+You now have all the code on your computer and can see it in VS Code. Think of this as getting all the building materials delivered to your construction site.
+
+**Understanding the Project Structure**
 ```
 Chart_Agent/
 ├── backend/
@@ -87,7 +247,7 @@ Chart_Agent/
 │   │   └── config.ts
 │   ├── Dockerfile
 │   └── package.json
-├── terraform/                   # AWS infrastructure as code
+├── pulumi/                   # AWS infrastructure as code
 │   ├── main.tf
 │   ├── backend.tf
 │   ├── variables.tf
@@ -104,7 +264,7 @@ Chart_Agent/
 │   ├── healthlake.tf
 │   └── cloudwatch.tf
 ├── scripts/                     # Helper scripts
-│   ├── setup-terraform-backend.sh
+│   ├── setup-pulumi-backend.sh
 │   ├── start-dev.sh
 │   ├── start-testing.sh
 │   ├── teardown.sh
@@ -115,7 +275,22 @@ Chart_Agent/
 
 ---
 
+**Each folder explained:**
+- `backend/` - Python server code (the "brain" that processes data)
+- `frontend/` - React website code (what users see in their browser)
+- `pulumi/` - Infrastructure configuration (tells AWS what to create)
+- `scripts/` - Helper commands (shortcuts to make your life easier)
+- `docs/` - Documentation (guides like this one)
+
+---
+
 ### Phase 2: Backend Development
+
+**Time Estimate**: 1-2 hours  
+**Difficulty**: Intermediate  
+**What You'll Learn**: How to set up a Python web server that talks to AWS
+
+**Overview**: The backend is already written for you! You just need to configure it with your AWS settings and run it.
 
 **2.1 AWS HealthLake Integration**
 
@@ -161,7 +336,7 @@ import json
 class BedrockService:
     def __init__(self):
         self.client = boto3.client('bedrock-runtime', region_name='us-east-1')
-        self.model_id = 'anthropic.claude-3-5-sonnet-20241022-v2:0'
+        self.model_id = 'anthropic.claude-3-7-sonnet-20250219-v1:0'
     
     def generate_summary(self, patient_data):
         # Format FHIR data into prompt
@@ -201,7 +376,79 @@ POST /api/patients/{id}/chat    # Ask follow-up questions
 
 ---
 
+**2.5 Test Backend Locally** (Detailed Steps)
+
+Let's make sure the backend works before moving on!
+
+**Step-by-Step Instructions:**
+
+1. **Create Python Virtual Environment**
+   ```bash
+   # Make sure you're in the backend folder
+   cd backend
+   
+   # Create isolated Python environment
+   python3 -m venv venv
+   
+   # Activate it:
+   # Mac/Linux:
+   source venv/bin/activate
+   # Windows:
+   venv\Scripts\activate
+   
+   # Your prompt should now show (venv)
+   ```
+
+2. **Install Python Dependencies**
+   ```bash
+   # Install all required Python packages
+   pip install -r requirements.txt
+   
+   # This takes 1-2 minutes
+   ```
+
+3. **Start the Backend Server**
+   ```bash
+   # Start the development server
+   uvicorn app.main:app --reload
+   
+   # You should see:
+   # INFO: Uvicorn running on http://127.0.0.1:8000
+   # INFO: Application startup complete
+   ```
+
+4. **Test in Browser**
+   - Open your web browser
+   - Go to: http://localhost:8000/docs
+   - You should see interactive API documentation!
+   - Try clicking on `/api/health` → "Try it out" → "Execute"
+   - You should get a response showing the backend is healthy
+
+5. **Keep This Running**
+   - Leave this terminal window open
+   - The backend needs to stay running
+   - To stop it later: Press Ctrl+C
+
+**What Just Happened?**
+- **Virtual Environment**: Created an isolated space for Python packages (like a container for your project's dependencies)
+- **Pip Install**: Downloaded all the code libraries the backend needs
+- **Uvicorn**: Started a web server that listens for requests
+- **API Docs**: Saw the interactive documentation showing all available endpoints
+
+**Troubleshooting:**
+- **Error about AWS credentials**: Make sure you ran `aws configure` earlier
+- **Error about HealthLake**: Check your `.env` file has the correct endpoint URL
+- **Port already in use**: Another program is using port 8000, try port 8001: `uvicorn app.main:app --reload --port 8001`
+
+---
+
 ### Phase 3: Frontend Development
+
+**Time Estimate**: 30-45 minutes  
+**Difficulty**: Beginner  
+**What You'll Learn**: How to run a React website that talks to your backend
+
+**Overview**: The frontend (website) is already built! You just need to install dependencies and start it.
 
 **3.1 Patient List Component**
 - Display provider's patient list for the day
@@ -240,7 +487,23 @@ POST /api/patients/{id}/chat    # Ask follow-up questions
 
 ---
 
+---
+
 ### Phase 4: Containerization
+
+**Time Estimate**: 20-30 minutes  
+**Difficulty**: Intermediate  
+**What You'll Learn**: How to package your app in Docker containers
+
+**What is Containerization?**
+Imagine you built a LEGO house. Containerization is like putting that house in a sealed box with instructions. Anyone can open the box and have the exact same house, regardless of where they are. Docker containers ensure your app runs the same way on any computer, anywhere.
+
+**Why Do This?**
+- Your app works the same on your computer, AWS, and your teammate's computer
+- No more "it works on my machine" problems
+- Easy to deploy to production
+
+**Good News**: Docker files are already written for you! You just need to understand and test them.
 
 **4.1 Backend Dockerfile**
 ```dockerfile
@@ -283,13 +546,28 @@ EXPOSE 80
 
 ---
 
-### Phase 5: AWS Infrastructure & Deployment with Terraform
+---
 
-**5.1 Terraform Project Structure**
+### Phase 5: AWS Infrastructure & Deployment with Pulumi
 
-Create modular, reusable Terraform configuration:
+**Time Estimate**: 1-2 hours (mostly waiting for AWS)  
+**Difficulty**: Intermediate  
+**What You'll Learn**: How to create AWS infrastructure automatically using code
+
+**What is Infrastructure as Code (IaC)?**
+Instead of clicking through AWS Console to create resources, you write configuration files that describe what you want. Pulumi reads these files and creates everything automatically. It's like having a robot assistant that sets up your AWS account exactly how you want it.
+
+**Benefits:**
+- ✅ Repeatable: Same setup every time
+- ✅ Version controlled: Track changes in Git
+- ✅ Destroyable: Delete everything with one command
+- ✅ Cost-controlled: Only create what you need
+
+**5.1 Pulumi Project Structure**
+
+Create modular, reusable Pulumi configuration:
 ```
-terraform/
+pulumi/
 ├── main.tf                    # Provider config, state backend
 ├── backend.tf                 # S3 state backend configuration
 ├── variables.tf               # Input variables
@@ -309,7 +587,7 @@ terraform/
 └── secrets.tf                 # Secrets Manager
 ```
 
-**5.2 Cost-Aware Terraform Configuration**
+**5.2 Cost-Aware Pulumi Configuration**
 
 **variables.tf** - Control infrastructure costs:
 ```hcl
@@ -358,19 +636,19 @@ ecs_frontend_count       = 1
 healthlake_datastore_name = "chart-agent-dev"
 ```
 
-**5.3 Terraform State Management**
+**5.3 Pulumi State Management**
 
-**One-time setup** (before first `terraform init`):
+**One-time setup** (before first `pulumi init`):
 ```bash
-# Create S3 bucket for Terraform state
-aws s3 mb s3://chart-agent-terraform-state
+# Create S3 bucket for Pulumi state
+aws s3 mb s3://chart-agent-pulumi-state
 aws s3api put-bucket-versioning \
-  --bucket chart-agent-terraform-state \
+  --bucket chart-agent-pulumi-state \
   --versioning-configuration Status=Enabled
 
 # Create DynamoDB table for state locking
 aws dynamodb create-table \
-  --table-name terraform-state-lock \
+  --table-name pulumi-state-lock \
   --attribute-definitions AttributeName=LockID,AttributeType=S \
   --key-schema AttributeName=LockID,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST
@@ -378,12 +656,12 @@ aws dynamodb create-table \
 
 **backend.tf** - Remote state configuration:
 ```hcl
-terraform {
+pulumi {
   backend "s3" {
-    bucket         = "chart-agent-terraform-state"
-    key            = "chart-agent/terraform.tfstate"
+    bucket         = "chart-agent-pulumi-state"
+    key            = "chart-agent/pulumi.tfstate"
     region         = "us-east-1"
-    dynamodb_table = "terraform-state-lock"
+    dynamodb_table = "pulumi-state-lock"
     encrypt        = true
   }
 }
@@ -455,21 +733,21 @@ resource "aws_iam_role" "ecs_task_role" {
 
 **5.5 Helper Scripts for Infrastructure Management**
 
-**scripts/setup-terraform-backend.sh**:
+**scripts/setup-pulumi-backend.sh**:
 ```bash
 #!/bin/bash
 set -e
-echo "Setting up Terraform state backend..."
-aws s3 mb s3://chart-agent-terraform-state || true
+echo "Setting up Pulumi state backend..."
+aws s3 mb s3://chart-agent-pulumi-state || true
 aws s3api put-bucket-versioning \
-  --bucket chart-agent-terraform-state \
+  --bucket chart-agent-pulumi-state \
   --versioning-configuration Status=Enabled
 aws dynamodb create-table \
-  --table-name terraform-state-lock \
+  --table-name pulumi-state-lock \
   --attribute-definitions AttributeName=LockID,AttributeType=S \
   --key-schema AttributeName=LockID,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST || true
-echo "✅ Terraform backend ready!"
+echo "✅ Pulumi backend ready!"
 ```
 
 **scripts/start-dev.sh**:
@@ -477,8 +755,8 @@ echo "✅ Terraform backend ready!"
 #!/bin/bash
 set -e
 echo "Starting minimal dev infrastructure..."
-cd terraform
-terraform apply -var-file="dev.tfvars" -auto-approve
+cd pulumi
+pulumi apply -var-file="dev.tfvars" -auto-approve
 echo "✅ Dev infrastructure ready! Cost: ~$0-5/month"
 echo "Run backend locally: cd backend && uvicorn app.main:app --reload"
 echo "Run frontend locally: cd frontend && npm start"
@@ -489,10 +767,10 @@ echo "Run frontend locally: cd frontend && npm start"
 #!/bin/bash
 set -e
 echo "Starting full testing infrastructure..."
-cd terraform
-terraform apply -var-file="testing.tfvars" -auto-approve
+cd pulumi
+pulumi apply -var-file="testing.tfvars" -auto-approve
 ./scripts/build-and-push.sh
-ALB_DNS=$(terraform output -raw alb_dns_name)
+ALB_DNS=$(pulumi output -raw alb_dns_name)
 echo "✅ Testing infrastructure ready!"
 echo "Access at: http://${ALB_DNS}"
 ```
@@ -504,8 +782,8 @@ set -e
 echo "⚠️  This will destroy ALL infrastructure!"
 read -p "Are you sure? (yes/no): " confirm
 if [ "$confirm" = "yes" ]; then
-  cd terraform
-  terraform destroy -auto-approve
+  cd pulumi
+  pulumi destroy -auto-approve
   echo "✅ All resources deleted. Cost: $0/month"
 else
   echo "Teardown cancelled"
@@ -570,7 +848,7 @@ cd frontend && npm start
 **5.7 Deployment Process**
 1. Build Docker images locally
 2. Tag and push to ECR (via build-and-push.sh)
-3. Apply Terraform to create/update infrastructure
+3. Apply Pulumi to create/update infrastructure
 4. ECS services automatically pull new images
 5. Verify deployment via ALB endpoint or localhost
 
@@ -602,7 +880,7 @@ aws cloudwatch put-metric-alarm \
 - **Local Dev**: $0-5/month (HealthLake <10GB free + Bedrock usage)
 - **Testing 4hrs/week**: $5-15/month (ECS/ALB part-time)
 - **Full-time Dev**: $100-150/month (all services 24/7)
-- **Destroyed**: $0/month (terraform destroy)
+- **Destroyed**: $0/month (pulumi destroy)
 
 **Best practice**: Use local development for daily coding, only spin up ECS/ALB for integration testing
 
@@ -757,31 +1035,31 @@ Maintain patient data in conversation history to enable questions like:
 
 ---
 
-## Terraform Infrastructure Management & Cost Optimization
+## Pulumi Infrastructure Management & Cost Optimization
 
 ### One-Command Infrastructure Control
 
-**Setup Terraform backend** (one-time):
+**Setup Pulumi backend** (one-time):
 ```bash
-./scripts/setup-terraform-backend.sh
+./scripts/setup-pulumi-backend.sh
 ```
 
 **Spin up minimal dev environment**:
 ```bash
-cd terraform
-terraform apply -var-file="dev.tfvars"
+cd pulumi
+pulumi apply -var-file="dev.tfvars"
 # Cost: ~$0-5/month
 ```
 
 **Spin up full testing environment**:
 ```bash
-terraform apply -var-file="testing.tfvars"
+pulumi apply -var-file="testing.tfvars"
 # Cost: ~$50-70/month
 ```
 
 **Tear down everything**:
 ```bash
-terraform destroy -auto-approve
+pulumi destroy -auto-approve
 # Cost: $0/month
 ```
 
@@ -823,11 +1101,11 @@ terraform destroy -auto-approve
 ## Deployment Checklist
 
 - [ ] AWS HealthLake data store created and populated
-- [ ] Bedrock access enabled for Claude 3.5 Sonnet
+- [ ] Bedrock access enabled for Claude 3.7 Sonnet
 - [ ] IAM roles configured with proper permissions
 - [ ] Backend Docker image built and pushed to ECR
 - [ ] Frontend Docker image built and pushed to ECR
-- [ ] Terraform infrastructure deployed (VPC, ECS, ALB)
+- [ ] Pulumi infrastructure deployed (VPC, ECS, ALB)
 - [ ] HTTPS certificate configured (Certificate Manager)
 - [ ] CloudWatch dashboards set up
 - [ ] Test with synthetic patients in HealthLake
@@ -859,15 +1137,15 @@ terraform destroy -auto-approve
 - AWS Account with admin access
 - AWS CLI configured
 - Docker installed
-- Terraform installed
+- Pulumi installed
 - Node.js 18+ and Python 3.11+
 
 ### Initial Setup
 1. Clone repository
-2. Run `./scripts/setup-terraform-backend.sh`
+2. Run `./scripts/setup-pulumi-backend.sh`
 3. Create AWS HealthLake data store via AWS Console
-4. Enable Bedrock access for Claude 3.5 Sonnet
-5. Update `terraform/dev.tfvars` with your HealthLake endpoint
+4. Enable Bedrock access for Claude 3.7 Sonnet
+5. Update `pulumi/dev.tfvars` with your HealthLake endpoint
 
 ### Daily Development
 1. Start minimal AWS infrastructure: `./scripts/start-dev.sh`

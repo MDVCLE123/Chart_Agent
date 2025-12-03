@@ -2,43 +2,55 @@
 set -e
 
 echo "=========================================="
-echo "Starting Full Testing Infrastructure"
+echo "Starting Testing Infrastructure"
 echo "=========================================="
 
-cd terraform
+echo "Deploying Pulumi stack with testing configuration..."
+echo "This creates full infrastructure (~$50-70/month)"
+echo ""
 
-# Initialize if needed
-if [ ! -d ".terraform" ]; then
-  echo "Initializing Terraform..."
-  terraform init
+cd infrastructure
+
+# Activate Python virtual environment
+if [ ! -d "venv" ]; then
+  echo "Creating Python virtual environment..."
+  python3 -m venv venv
+  source venv/bin/activate
+  pip install -r requirements.txt
+else
+  source venv/bin/activate
 fi
 
-# Apply testing configuration
-echo "Applying testing configuration (full stack)..."
-terraform apply -var-file="testing.tfvars" -auto-approve
+# Select or create testing stack
+pulumi stack select testing 2>/dev/null || pulumi stack init testing
 
-# Get AWS account ID and region
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-AWS_REGION=$(terraform output -raw vpc_id | cut -d: -f4)
+# Deploy infrastructure
+pulumi up --yes
 
-# Build and push Docker images
 echo ""
-echo "Building and pushing Docker images..."
-cd ..
-./scripts/build-and-push.sh
+echo "Stack deployed successfully!"
+echo ""
 
-# Get ALB DNS
-cd terraform
-ALB_DNS=$(terraform output -raw alb_dns_name)
+# Get outputs
+echo "Fetching stack outputs..."
+ALB_DNS=$(pulumi stack output alb_dns_name 2>/dev/null || echo "")
+ECR_BACKEND=$(pulumi stack output backend_ecr_repository_url)
+ECR_FRONTEND=$(pulumi stack output frontend_ecr_repository_url)
 
 echo ""
 echo "✅ Testing infrastructure ready!"
 echo ""
-echo "Access your application at:"
-echo "  http://$ALB_DNS"
-echo ""
-echo "Note: It may take 2-3 minutes for services to become healthy"
-echo ""
-echo "To scale back down when done:"
-echo "  ./scripts/start-dev.sh"
+echo "ECR Backend Repository:  $ECR_BACKEND"
+echo "ECR Frontend Repository: $ECR_FRONTEND"
 
+if [ -n "$ALB_DNS" ]; then
+  echo "Application URL: http://$ALB_DNS"
+fi
+
+echo ""
+echo "Next steps:"
+echo "  1. Build and push Docker images: ./scripts/build-and-push.sh"
+echo "  2. Deploy ECS services with Pulumi (update infrastructure code)"
+echo ""
+echo "View all outputs: pulumi stack output"
+echo ""
