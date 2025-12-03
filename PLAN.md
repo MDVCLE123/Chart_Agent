@@ -6,23 +6,42 @@
 
 A web application that helps healthcare providers prepare for patient appointments by automatically summarizing patient records using AI. Think of it as an intelligent assistant that reads through medical records and creates a quick summary before a doctor's appointment.
 
+## Current Status ✅
+
+| Component | Status |
+|-----------|--------|
+| AWS HealthLake | ✅ Working |
+| AWS Bedrock (Claude Sonnet 4) | ✅ Working |
+| Epic FHIR Sandbox | ✅ Working (7 test patients) |
+| athenahealth Sandbox | ⏳ OAuth working, needs practice auth |
+| Demo/HAPI FHIR | ✅ Working |
+| Docker Development | ✅ Working |
+| AI Summaries | ✅ Working |
+| Follow-up Chat | ✅ Working |
+
 ## Architecture Overview
 
 **Frontend**: React application for provider interface (the website doctors will use)  
 **Backend**: Python (FastAPI) REST API on ECS/Fargate (the server that handles data)  
-**AI**: AWS Bedrock with Claude 3.7 Sonnet for summarization (AI that reads and summarizes)  
-**FHIR Data**: AWS HealthLake (database with patient medical records)  
+**AI**: AWS Bedrock with Claude Sonnet 4 for summarization (AI that reads and summarizes)  
+**FHIR Data Sources**:
+- AWS HealthLake (your synthetic/real data)
+- Epic Sandbox (7 test patients)
+- athenahealth Sandbox (Preview API)
+- Demo/HAPI FHIR (public test server)
+
 **Infrastructure**: 100% AWS-native solution with containerized deployment  
 **Data Sources**: HealthLake (dev/synthetic) → Epic sandbox → Production EHRs
 
 ### Simple Explanation
-- **Frontend** = The website interface doctors see
-- **Backend** = The behind-the-scenes server that processes requests
-- **AI (Claude)** = Artificial intelligence that reads and summarizes medical data
+- **Frontend** = The website interface doctors see (React with FHIR source dropdown)
+- **Backend** = The behind-the-scenes server that processes requests (FastAPI)
+- **AI (Claude Sonnet 4)** = Artificial intelligence that reads and summarizes medical data
 - **FHIR** = Standard format for healthcare data (like how MP3 is a standard for music)
 - **AWS** = Amazon Web Services - cloud platform hosting everything
 - **Docker** = Packages your app so it runs the same everywhere
 - **Pulumi** = Tool to create and manage AWS infrastructure with code
+- **Epic/athenahealth** = EHR systems with FHIR APIs for real patient data
 
 ## Technical Stack
 
@@ -335,8 +354,8 @@ import json
 
 class BedrockService:
     def __init__(self):
-        self.client = boto3.client('bedrock-runtime', region_name='us-east-1')
-        self.model_id = 'anthropic.claude-3-7-sonnet-20250219-v1:0'
+        self.client = boto3.client('bedrock-runtime', region_name='us-east-2')
+        self.model_id = 'us.anthropic.claude-sonnet-4-20250514-v1:0'
     
     def generate_summary(self, patient_data):
         # Format FHIR data into prompt
@@ -886,54 +905,89 @@ aws cloudwatch put-metric-alarm \
 
 ---
 
-### Phase 6: Epic FHIR Sandbox Integration
+### Phase 6: Epic FHIR Sandbox Integration ✅ COMPLETED
 
-**6.1 Epic App Registration**
-- Register application at fhir.epic.com
-- Obtain client ID and credentials
-- Configure OAuth2 flow (SMART on FHIR)
-- Define scopes: `patient/*.read`, `launch`, `online_access`
+**Status**: ✅ Working with 7 test patients
 
-**6.2 Multi-Source FHIR Adapter**
+**6.1 Epic App Registration** ✅
+- Registered application at fhir.epic.com
+- Obtained Non-Production Client ID: `5f2384c3-5bb4-484f-a528-068177894d81`
+- Configured JWT-based OAuth2 (Backend Systems)
+- JWKS hosted on S3: `https://chart-agent-jwks-396183525613.s3.us-east-2.amazonaws.com/jwks.json`
+- Scopes: `system/Patient.read`, `system/Condition.read`, `system/Encounter.read`, etc.
 
-Create adapter pattern in backend to support multiple FHIR sources:
+**6.2 Epic Test Patients Available**
+
+| Patient | FHIR ID | DOB |
+|---------|---------|-----|
+| Camila Maria Lopez | erXuFYUfucBZaryVksYEcMg3 | 1987-09-12 |
+| Derrick Lin | eq081-VQEgP8drUUqCWzHfw3 | 1973-06-03 |
+| Desiree Caroline Powell | eAB3mDIBBcyUKviyzrxsnAw3 | 2014-11-14 |
+| Elijah John Davis | egqBHVfQlt4Bw3XGXoxVxHg3 | 1993-08-18 |
+| Linda Jane Ross | eIXesllypH3M9tAA5WdJftQ3 | 1969-04-27 |
+| Olivia Anne Roberts | eh2xYHuzl9nkSFVvV3osUHg3 | 2003-01-07 |
+| Warren James McGinnis | e0w0LEDCYtfckT6N.CkJKCw3 | 1952-05-24 |
+
+**6.3 Multi-Source FHIR Client** ✅
+
+Implemented factory pattern in `healthlake_client.py`:
 ```python
-class FHIRAdapter:
-    @staticmethod
-    def get_client(source='healthlake'):
-        if source == 'healthlake':
-            return HealthLakeClient()
-        elif source == 'epic':
-            return EpicFHIRClient()
-        # Future: Cerner, Meditech, etc.
+FHIR_SOURCES = ["healthlake", "epic", "athena", "demo"]
 
-class EpicFHIRClient:
-    def __init__(self):
-        # Epic-specific OAuth2 authentication
-        # Handle Epic FHIR API quirks
-        pass
+def get_fhir_client(source: str = None):
+    return FHIRClient(source=source)
+
+class FHIRClient:
+    def __init__(self, source: str = "healthlake"):
+        if source == "epic":
+            self.auth_type = "epic_jwt"  # RS384 JWT auth
+        elif source == "athena":
+            self.auth_type = "athena_oauth"  # Client credentials
+        elif source == "demo":
+            self.auth_type = None  # Public server
+        else:
+            self.auth_type = "sigv4"  # AWS HealthLake
 ```
 
-**6.3 Testing & Validation**
-- Test data retrieval from Epic sandbox
-- Verify OAuth2 SMART on FHIR flow
-- Test Claude summarization with Epic data
-- Compare Epic vs HealthLake data structures
-- Document any Epic-specific handling needed
+**6.4 Testing & Validation** ✅
+- ✅ Epic OAuth2 JWT authentication working
+- ✅ Patient data retrieval working
+- ✅ Conditions, medications, observations accessible
+- ✅ Claude summarization working with Epic data
+- ✅ Frontend dropdown for source selection
 
 ---
 
-### Phase 7: Multi-EHR Compatibility
+### Phase 7: athenahealth Integration ⏳ IN PROGRESS
 
-**7.1 Abstraction Layer**
-- EHR adapter pattern supports different sources
-- Handle different FHIR versions (R4 primarily, R3 fallback)
-- Normalize data structures for Claude consumption
-- Configuration-based EHR selection
+**Status**: OAuth working, needs practice-level authorization
 
-**7.2 Configuration Management**
-- Environment variables for EHR selection
-- Secrets Manager for multi-EHR credentials
+**7.1 athenahealth App Registration** ✅
+- Registered at developer.api.athena.io
+- Client ID: `0oa1048xe2u6ejB4j298`
+- App Type: 2-Legged OAuth (Backend Systems)
+- API: FHIR R4 SMART V1
+- Scopes: `system/Patient.read`, `system/Condition.read`, etc.
+
+**7.2 Authentication** ✅
+- OAuth2 client credentials flow working
+- Token endpoint: `https://api.preview.platform.athenahealth.com/oauth2/v1/token`
+
+**7.3 Remaining Work** ⏳
+- Need practice-level authorization (Practice ID 195900)
+- Contact athenahealth support if needed
+
+### Phase 8: Multi-EHR Compatibility
+
+**8.1 Abstraction Layer** ✅
+- Factory pattern supports: healthlake, epic, athena, demo
+- Handles different auth methods (SigV4, JWT, OAuth2, none)
+- Normalizes data structures for Claude consumption
+- Frontend dropdown for source selection
+
+**8.2 Configuration Management** ✅
+- Environment variables for all EHR credentials
+- Docker Compose passes env vars to containers
 - Support multiple FHIR endpoints simultaneously
 
 ---
@@ -1067,10 +1121,15 @@ pulumi destroy -auto-approve
 
 | Scenario | Services Running | Monthly Cost |
 |----------|------------------|--------------|
-| **Local Dev** | HealthLake (<10GB) + Bedrock usage | $0-5 |
-| **Testing 4hrs/week** | + ECS + ALB (part-time) | $5-15 |
+| **Local Dev with Docker** | HealthLake + Bedrock usage only | $2-5/day |
+| **Testing 4hrs/week** | + ECS + ALB (part-time) | $15-30 |
 | **Full-time Dev** | All services 24/7 | $100-150 |
 | **Destroyed** | Nothing | $0 |
+
+**Current Estimated Daily Cost**: ~$1.50-2.00/day
+- HealthLake: ~$0.06/hour ($1.44/day)
+- Bedrock: ~$0.01-0.05 per summary
+- S3 (JWKS): < $0.01/day
 
 ---
 
@@ -1136,35 +1195,83 @@ pulumi destroy -auto-approve
 ### Prerequisites
 - AWS Account with admin access
 - AWS CLI configured
-- Docker installed
-- Pulumi installed
+- Docker Desktop installed and running
 - Node.js 18+ and Python 3.11+
 
-### Initial Setup
+### Initial Setup (One-time)
 1. Clone repository
-2. Run `./scripts/setup-pulumi-backend.sh`
-3. Create AWS HealthLake data store via AWS Console
-4. Enable Bedrock access for Claude 3.7 Sonnet
-5. Update `pulumi/dev.tfvars` with your HealthLake endpoint
+2. Create AWS HealthLake data store via AWS Console (with Synthea data)
+3. Enable Bedrock access for Claude Sonnet 4
+4. Register Epic app at fhir.epic.com (optional)
+5. Register athenahealth app at developer.api.athena.io (optional)
 
-### Daily Development
-1. Start minimal AWS infrastructure: `./scripts/start-dev.sh`
-2. Run backend: `cd backend && uvicorn app.main:app --reload`
-3. Run frontend: `cd frontend && npm start`
-4. Access at `http://localhost:3000`
+### Daily Development with Docker
+```bash
+# 1. Create .env file with your credentials
+cat > .env << 'EOF'
+AWS_REGION=us-east-2
+AWS_ACCESS_KEY_ID=your-key
+AWS_SECRET_ACCESS_KEY=your-secret
+HEALTHLAKE_DATASTORE_ENDPOINT=https://healthlake.us-east-2.amazonaws.com/datastore/YOUR-ID/r4/
+BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
+USE_DEMO_MODE=false
+ATHENA_CLIENT_ID=your-athena-client-id
+ATHENA_CLIENT_SECRET=your-athena-secret
+EOF
 
-### Weekly Testing
-1. Deploy full stack: `./scripts/start-testing.sh`
-2. Test via Application Load Balancer
-3. Scale down: `./scripts/start-dev.sh`
+# 2. Start all services
+docker-compose up -d --build
+
+# 3. Access the app
+open http://localhost:3000
+```
+
+### Testing Different FHIR Sources
+1. Select source from dropdown in the app:
+   - **AWS HealthLake**: Your Synthea patients
+   - **Epic Sandbox**: 7 test patients (Camila Lopez, etc.)
+   - **Public FHIR Server**: Demo data
+2. Click a patient → Generate Summary
+3. Ask follow-up questions in chat
 
 ### When Done
-1. Tear down all resources: `./scripts/teardown.sh`
-2. Confirm to delete all AWS infrastructure
+```bash
+# Stop Docker containers
+docker-compose down
+
+# Optional: Tear down AWS resources
+./scripts/teardown.sh
+```
+
+---
+
+## Implementation Status Summary
+
+### Completed ✅
+- [x] AWS HealthLake setup with Synthea synthetic data
+- [x] AWS Bedrock with Claude Sonnet 4
+- [x] Python FastAPI backend with multi-source FHIR client
+- [x] React frontend with FHIR source dropdown
+- [x] Docker Compose for local development
+- [x] Epic FHIR Sandbox integration (7 test patients)
+- [x] JWT authentication with JWKS hosted on S3
+- [x] AI-powered patient summaries
+- [x] Follow-up chat with Claude
+
+### In Progress ⏳
+- [ ] athenahealth practice-level authorization
+- [ ] Pulumi infrastructure deployment
+- [ ] AWS ECS/Fargate deployment
+
+### Future Enhancements 📋
+- [ ] Real-time WebSocket updates
+- [ ] Voice interface with Amazon Transcribe
+- [ ] Mobile app with React Native
+- [ ] EHR write-back capabilities
 
 ---
 
 **Last Updated**: December 2024  
-**Version**: 1.0  
-**Status**: Ready for Implementation
+**Version**: 2.0  
+**Status**: Core Features Complete - Epic Working!
 

@@ -7,11 +7,12 @@
 1. [What You're Building](#what-youre-building)
 2. [Prerequisites - What to Install](#prerequisites)
 3. [Phase 1: AWS Setup](#phase-1-aws-setup)
-4. [Phase 2: Running Locally](#phase-2-running-locally)
+4. [Phase 2: Running Locally with Docker](#phase-2-running-locally-with-docker)
 5. [Phase 3: Understanding the Code](#phase-3-understanding-the-code)
-6. [Phase 4: Deploying to AWS](#phase-4-deploying-to-aws)
-7. [Troubleshooting](#troubleshooting)
-8. [Next Steps](#next-steps)
+6. [Phase 4: FHIR Data Sources](#phase-4-fhir-data-sources)
+7. [Phase 5: Deploying to AWS](#phase-5-deploying-to-aws)
+8. [Troubleshooting](#troubleshooting)
+9. [Next Steps](#next-steps)
 
 ---
 
@@ -28,9 +29,14 @@
 
 - **Frontend** = Website that doctors see in their browser
 - **Backend** = Server that processes requests (like a restaurant kitchen)
-- **Database** = Where patient data is stored (AWS HealthLake)
-- **AI** = Claude reads medical records and creates summaries
+- **FHIR Data Sources** = Where patient data comes from:
+  - AWS HealthLake (your own data store)
+  - Epic Sandbox (7 test patients)
+  - athenahealth Sandbox (coming soon)
+  - Demo/HAPI FHIR (public test server)
+- **AI** = Claude Sonnet 4 reads medical records and creates summaries
 - **Cloud** = AWS hosts everything so it works from anywhere
+- **Docker** = Packages your app so it runs the same everywhere
 
 ---
 
@@ -291,7 +297,7 @@ Bedrock gives you access to Claude AI for summarizing text.
 2. **Go to Model Catalog**
    - Left sidebar → "Model catalog"
    - Find "Anthropic" section
-   - Click on "Claude 3.7 Sonnet" (or Claude 3.7 Sonnet)
+   - Click on "Claude Sonnet 4" (recommended) or "Claude 3.7 Sonnet"
 
 3. **Submit Use Case Details** (Required for first-time users)
    - You'll see a yellow banner: "Anthropic requires first-time customers to submit use case details"
@@ -323,7 +329,7 @@ Bedrock gives you access to Claude AI for summarizing text.
    - Left sidebar → "Model access"
    - Click "Manage model access" (top right)
    - Find "Anthropic" section
-   - ✅ Check "Claude 3.7 Sonnet" or "Claude 3.7 Sonnet"
+   - ✅ Check "Claude Sonnet 4" (recommended)
    - ✅ Check "Claude 3 Haiku" (optional, cheaper for testing)
    - Scroll down, click "Request model access"
 
@@ -331,6 +337,8 @@ Bedrock gives you access to Claude AI for summarizing text.
    - Refresh the page
    - Should see green "Access granted" next to Claude models
    - If "Pending", wait and refresh periodically
+
+**Model ID for Configuration**: `us.anthropic.claude-sonnet-4-20250514-v1:0`
 
 **What you just did**: Got permission to use Claude AI, which will read and summarize medical records.
 
@@ -368,55 +376,49 @@ VS Code should open with all your project files visible in the sidebar.
 
 ---
 
-## Phase 2: Running Locally
+## Phase 2: Running Locally with Docker
 
-Now let's get the application running on your computer!
+Now let's get the application running on your computer using Docker!
 
-### 2.1 Configure Backend (10 minutes)
+### 2.1 Configure Environment (10 minutes)
 
-**Navigate to backend folder:**
-```bash
-cd backend
-```
+**Create the root `.env` configuration file:**
 
-**Create the `.env` configuration file:**
-
-1. In VS Code, right-click on the `backend` folder
+1. In VS Code, right-click on the project root folder (Chart_Agent)
 2. Select "New File"
 3. Name it `.env` (include the dot!)
 4. Paste the following content:
 
 ```bash
 # AWS Configuration
-AWS_REGION=us-east-1
+AWS_REGION=us-east-2
+AWS_ACCESS_KEY_ID=your-access-key-id
+AWS_SECRET_ACCESS_KEY=your-secret-access-key
 
-# AWS Credentials (leave empty if using AWS CLI - it will use your default profile)
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
+# HealthLake Configuration - REPLACE WITH YOUR DATASTORE ID
+HEALTHLAKE_DATASTORE_ENDPOINT=https://healthlake.us-east-2.amazonaws.com/datastore/YOUR-DATASTORE-ID/r4/
 
-# HealthLake Configuration - REPLACE WITH YOUR URL FROM STEP 1.1
-HEALTHLAKE_DATASTORE_ENDPOINT=https://healthlake.us-east-1.amazonaws.com/datastore/YOUR-DATASTORE-ID/r4/
+# Bedrock Configuration (Claude Sonnet 4)
+BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
 
-# Bedrock Configuration
-BEDROCK_MODEL_ID=anthropic.claude-3-7-sonnet-20250219-v1:0
+# Demo Mode (set to false to use HealthLake)
+USE_DEMO_MODE=false
 
-# Application Settings
-ENVIRONMENT=development
-DEBUG=true
-LOG_LEVEL=INFO
-
-# CORS Settings (for local development)
-CORS_ORIGINS=["http://localhost:3000","http://localhost:8000"]
+# athenahealth Configuration (optional)
+ATHENA_CLIENT_ID=your-athena-client-id
+ATHENA_CLIENT_SECRET=your-athena-client-secret
 ```
 
-5. **Important**: Replace `YOUR-DATASTORE-ID` with your actual HealthLake datastore ID from step 1.1
+5. **Important**: Replace placeholders with your actual values
 6. Save the file (Cmd+S or Ctrl+S)
 
 **💡 Tip**: If you don't see the `.env` file after creating it, VS Code might be hiding dotfiles. Click the refresh icon in the Explorer panel.
 
 ---
 
-### 2.2 Start Backend Server (5 minutes)
+### 2.2 Start with Docker Compose (5 minutes)
+
+**Make sure Docker Desktop is running!**
 
 **Open Terminal in VS Code:**
 - Menu: Terminal → New Terminal
@@ -424,93 +426,117 @@ CORS_ORIGINS=["http://localhost:3000","http://localhost:8000"]
 
 **Run these commands:**
 ```bash
-# Make sure you're in backend folder
-cd backend
+# Make sure you're in the project root folder
+cd /path/to/Chart_Agent
 
-# Create Python virtual environment
-python3 -m venv venv
+# Build and start all services
+docker-compose up -d --build
 
-# Activate it (Mac/Linux):
-source venv/bin/activate
-
-# Activate it (Windows):
-venv\Scripts\activate
-
-# You should see (venv) in your prompt now
-
-# Install dependencies (takes 1-2 minutes)
-pip install -r requirements.txt
-
-# Start the server
-uvicorn app.main:app --reload
+# Watch the logs
+docker-compose logs -f
 ```
 
 **Success looks like:**
 ```
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process
-INFO:     Started server process
-INFO:     Application startup complete.
+chart_agent-backend-1   | INFO:     Uvicorn running on http://0.0.0.0:8000
+chart_agent-backend-1   | INFO:     Application startup complete.
+chart_agent-frontend-1  | nginx is running...
 ```
 
 **Test it:**
-- Open browser
-- Go to: http://localhost:8000/docs
-- You should see API documentation!
-
-**Keep this terminal running!** Don't close it.
+- Backend API: http://localhost:8000/docs
+- Frontend App: http://localhost:3000
 
 ---
 
-### 2.3 Start Frontend (5 minutes)
+### 2.3 Docker Commands Cheat Sheet
 
-**Open a SECOND terminal:**
-- VS Code: Click the + icon next to your terminal tab
-- Or: Terminal → New Terminal
-
-**Run these commands:**
 ```bash
-# Navigate to frontend
-cd frontend
+# Start services
+docker-compose up -d
 
-# Install dependencies (takes 2-3 minutes)
-npm install
+# Stop services
+docker-compose down
 
-# Start development server
-npm start
+# Rebuild after code changes
+docker-compose up -d --build
+
+# View logs
+docker-compose logs -f
+
+# Restart backend only
+docker restart chart_agent-backend-1
+
+# Check running containers
+docker ps
 ```
-
-**Success looks like:**
-```
-Compiled successfully!
-
-You can now view chart-agent-frontend in the browser.
-
-  Local:            http://localhost:3000
-  On Your Network:  http://192.168.1.x:3000
-```
-
-**Your browser should automatically open to http://localhost:3000**
 
 ---
 
 ### 2.4 Use the Application! 🎉
 
 You should now see:
+- **Top**: FHIR Source dropdown (HealthLake, Epic, athenahealth, Demo)
 - **Left side**: List of patients
-- **Right side**: Empty at first
+- **Right side**: Patient details and AI summary
 
 **Try it out:**
-1. Click on a patient name
-2. You'll see their demographics
-3. Click "Generate Summary" button
-4. Wait 5-10 seconds
-5. **AI-generated summary appears!**
-6. Try asking questions in the chat box:
+1. **Select a FHIR Source** from the dropdown:
+   - **AWS HealthLake**: Your Synthea synthetic patients
+   - **Epic Sandbox**: 7 real Epic test patients
+   - **Public FHIR Server**: Demo data from HAPI FHIR
+2. Click on a patient name
+3. You'll see their demographics
+4. Click "Generate Summary" button
+5. Wait 5-10 seconds
+6. **AI-generated summary appears!**
+7. Try asking questions in the chat box:
    - "What was the patient's last A1C value?"
    - "Any recent medication changes?"
+   - "Summarize cardiovascular history"
 
 **Congratulations!** You're running a full healthcare AI application on your computer!
+
+---
+
+## Phase 4: FHIR Data Sources
+
+Your app supports multiple FHIR data sources:
+
+### 4.1 AWS HealthLake (Your Data)
+
+Your own FHIR data store with Synthea synthetic patients.
+
+**Status**: ✅ Working
+
+### 4.2 Epic Sandbox (7 Test Patients)
+
+Real Epic FHIR sandbox with OAuth2 JWT authentication.
+
+**Test Patients Available**:
+| Patient | DOB | Gender |
+|---------|-----|--------|
+| Camila Maria Lopez | 1987-09-12 | Female |
+| Derrick Lin | 1973-06-03 | Male |
+| Desiree Caroline Powell | 2014-11-14 | Female |
+| Elijah John Davis | 1993-08-18 | Male |
+| Linda Jane Ross | 1969-04-27 | Female |
+| Olivia Anne Roberts | 2003-01-07 | Female |
+| Warren James McGinnis | 1952-05-24 | Male |
+
+**Status**: ✅ Working
+
+### 4.3 athenahealth Sandbox
+
+athenahealth Preview API with OAuth2 client credentials.
+
+**Status**: ⏳ OAuth working, needs practice-level authorization
+
+### 4.4 Demo (HAPI FHIR)
+
+Public FHIR test server for quick testing.
+
+**Status**: ✅ Working
 
 ---
 

@@ -1,6 +1,6 @@
 /**
  * Patient List Component
- * Displays the provider's daily patient list with practitioner filter
+ * Displays the provider's daily patient list with FHIR source selector and practitioner filter
  */
 import React, { useState, useEffect } from 'react';
 import {
@@ -22,19 +22,32 @@ import {
   SelectChangeEvent,
   TextField,
   InputAdornment,
+  Divider,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import StorageIcon from '@mui/icons-material/Storage';
 import { apiService } from '../services/api';
-import { PatientBasic, PractitionerBasic } from '../types';
+import { PatientBasic, PractitionerBasic, FHIRSource } from '../types';
 
 interface PatientListProps {
   onPatientSelect: (patientId: string) => void;
   selectedPatientId?: string;
+  fhirSource: FHIRSource;
+  onFhirSourceChange: (source: FHIRSource) => void;
 }
+
+// FHIR source options with display info
+const FHIR_SOURCE_OPTIONS = [
+  { id: 'healthlake' as FHIRSource, name: 'AWS HealthLake', icon: '☁️' },
+  { id: 'epic' as FHIRSource, name: 'Epic Sandbox', icon: '🏥' },
+  { id: 'demo' as FHIRSource, name: 'Public FHIR Server', icon: '🧪' },
+];
 
 export const PatientList: React.FC<PatientListProps> = ({
   onPatientSelect,
   selectedPatientId,
+  fhirSource,
+  onFhirSourceChange,
 }) => {
   const [patients, setPatients] = useState<PatientBasic[]>([]);
   const [practitioners, setPractitioners] = useState<PractitionerBasic[]>([]);
@@ -49,10 +62,13 @@ export const PatientList: React.FC<PatientListProps> = ({
     patient.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Load data when fhirSource changes
   useEffect(() => {
+    setSelectedPractitioner('');
+    setSearchTerm('');
     loadPractitioners();
     loadPatients();
-  }, []);
+  }, [fhirSource]);
 
   useEffect(() => {
     loadPatients(selectedPractitioner || undefined);
@@ -61,10 +77,11 @@ export const PatientList: React.FC<PatientListProps> = ({
   const loadPractitioners = async () => {
     try {
       setLoadingPractitioners(true);
-      const data = await apiService.getPractitioners(100);
+      const data = await apiService.getPractitioners(100, fhirSource);
       setPractitioners(data);
     } catch (err: any) {
       console.error('Failed to load practitioners:', err);
+      setPractitioners([]);
     } finally {
       setLoadingPractitioners(false);
     }
@@ -74,13 +91,17 @@ export const PatientList: React.FC<PatientListProps> = ({
     try {
       setLoading(true);
       setError(null);
-      const data = await apiService.getPatients(50, practitionerId);
+      const data = await apiService.getPatients(50, practitionerId, fhirSource);
       setPatients(data);
     } catch (err: any) {
       setError(err.message || 'Failed to load patients');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleFhirSourceChange = (event: SelectChangeEvent) => {
+    onFhirSourceChange(event.target.value as FHIRSource);
   };
 
   const handlePractitionerChange = (event: SelectChangeEvent) => {
@@ -112,6 +133,31 @@ export const PatientList: React.FC<PatientListProps> = ({
   return (
     <Card>
       <CardContent>
+        {/* FHIR Data Source Selector */}
+        <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+          <InputLabel id="fhir-source-label">Data Source</InputLabel>
+          <Select
+            labelId="fhir-source-label"
+            id="fhir-source-select"
+            value={fhirSource}
+            label="Data Source"
+            onChange={handleFhirSourceChange}
+            startAdornment={
+              <InputAdornment position="start">
+                <StorageIcon fontSize="small" />
+              </InputAdornment>
+            }
+          >
+            {FHIR_SOURCE_OPTIONS.map((option) => (
+              <MenuItem key={option.id} value={option.id}>
+                {option.icon} {option.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <Divider sx={{ my: 2 }} />
+
         {/* Practitioner Dropdown */}
         <FormControl fullWidth size="small" sx={{ mb: 2 }}>
           <InputLabel id="practitioner-select-label">Filter by Practitioner</InputLabel>

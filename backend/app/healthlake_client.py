@@ -1,7 +1,10 @@
-"""AWS HealthLake FHIR client."""
+"""Multi-source FHIR client supporting HealthLake, Epic, and public servers."""
 import boto3
 import requests
 import json
+import jwt
+import time
+import uuid
 from typing import List, Dict, Any, Optional
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
@@ -14,36 +17,210 @@ from app.models import (
 )
 
 
-class HealthLakeClient:
-    """Client for interacting with AWS HealthLake or public FHIR API."""
+# Valid FHIR source options
+FHIR_SOURCES = ["healthlake", "epic", "athena", "demo"]
+
+# Epic sandbox test patients (Epic requires known patient IDs for Backend Systems)
+EPIC_TEST_PATIENTS = [
+    {"id": "erXuFYUfucBZaryVksYEcMg3", "name": "Camila Lopez"},
+    {"id": "eq081-VQEgP8drUUqCWzHfw3", "name": "Derrick Lin"},
+    {"id": "eAB3mDIBBcyUKviyzrxsnAw3", "name": "Desiree Powell"},
+    {"id": "egqBHVfQlt4Bw3XGXoxVxHg3", "name": "Elijah Davis"},
+    {"id": "eIXesllypH3M9tAA5WdJftQ3", "name": "Linda Ross"},
+    {"id": "eh2xYHuzl9nkSFVvV3osUHg3", "name": "Olivia Roberts"},
+    {"id": "e0w0LEDCYtfckT6N.CkJKCw3", "name": "Warren McGinnis"},
+]
+
+
+def get_fhir_client(source: str = None):
+    """Factory function to get appropriate FHIR client based on source."""
+    if source is None:
+        # Default behavior based on settings
+        if settings.use_demo_mode:
+            source = "demo"
+        else:
+            source = "healthlake"
     
-    def __init__(self):
-        self.demo_mode = settings.use_demo_mode
+    return FHIRClient(source=source)
+
+
+class FHIRClient:
+    """Client for interacting with multiple FHIR servers (HealthLake, Epic, athenahealth, public)."""
+    
+    # Class-level token cache for Epic
+    _epic_token = None
+    _epic_token_expires = 0
+    
+    # Class-level token cache for athenahealth
+    _athena_token = None
+    _athena_token_expires = 0
+    
+    def __init__(self, source: str = "healthlake"):
+        """
+        Initialize FHIR client for specified source.
         
-        if self.demo_mode:
-            # Use public FHIR server for testing
+        Args:
+            source: One of 'healthlake', 'epic', 'athena', or 'demo'
+        """
+        self.source = source.lower()
+        self.auth_type = None  # 'sigv4', 'epic_jwt', 'athena_oauth', or None
+        
+        if self.source == "epic":
+            # Epic Sandbox with JWT authentication
+            self.endpoint = settings.epic_fhir_base_url.rstrip('/')
+            self.auth_type = "epic_jwt"
+            print(f"🏥 Epic mode: Using Epic FHIR sandbox at {self.endpoint}")
+        elif self.source == "athena":
+            # athenahealth with OAuth2 client credentials
+            self.endpoint = settings.athena_fhir_base_url.rstrip('/')
+            self.auth_type = "athena_oauth"
+            print(f"🏥 athenahealth mode: Using athenahealth sandbox at {self.endpoint}")
+        elif self.source == "demo":
+            # Public FHIR server for testing (no auth)
             self.endpoint = settings.demo_fhir_server.rstrip('/')
+            self.auth_type = None
             print(f"🧪 Demo mode: Using public FHIR server at {self.endpoint}")
         else:
-            # Use AWS HealthLake
+            # AWS HealthLake (requires SigV4 auth)
+            self.source = "healthlake"
             self.endpoint = settings.healthlake_datastore_endpoint.rstrip('/')
             self.region = settings.aws_region
+            self.auth_type = "sigv4"
             self.session = boto3.Session(
                 aws_access_key_id=settings.aws_access_key_id if settings.aws_access_key_id else None,
                 aws_secret_access_key=settings.aws_secret_access_key if settings.aws_secret_access_key else None,
                 region_name=self.region
             )
             self.credentials = self.session.get_credentials()
+            print(f"☁️ HealthLake mode: Using AWS HealthLake at {self.endpoint}")
+    
+    def _get_epic_token(self) -> str:
+        """Get OAuth2 access token for Epic using JWT client credentials."""
+        # Check if we have a valid cached token
+        if FHIRClient._epic_token and time.time() < FHIRClient._epic_token_expires - 60:
+            return FHIRClient._epic_token
+        
+        try:
+            # Read private key
+            with open(settings.epic_private_key_path, 'r') as f:
+                private_key = f.read()
+            
+            # Create JWT assertion
+            now = int(time.time())
+            claims = {
+                "iss": settings.epic_client_id,
+                "sub": settings.epic_client_id,
+                "aud": settings.epic_token_url,
+                "jti": str(uuid.uuid4()),
+                "exp": now + 300,  # 5 minutes
+                "iat": now,
+                "nbf": now
+            }
+            
+            # Sign JWT with RS384
+            token = jwt.encode(
+                claims,
+                private_key,
+                algorithm="RS384",
+                headers={"kid": "chart-agent-key-1"}
+            )
+            
+            # Exchange JWT for access token
+            response = requests.post(
+                settings.epic_token_url,
+                data={
+                    "grant_type": "client_credentials",
+                    "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                    "client_assertion": token
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                FHIRClient._epic_token = data["access_token"]
+                FHIRClient._epic_token_expires = time.time() + data.get("expires_in", 300)
+                print(f"✅ Epic OAuth token obtained successfully")
+                return FHIRClient._epic_token
+            else:
+                print(f"❌ Epic OAuth failed: {response.status_code} - {response.text}")
+                raise Exception(f"Epic OAuth failed: {response.text}")
+                
+        except FileNotFoundError:
+            print(f"❌ Epic private key not found at {settings.epic_private_key_path}")
+            raise Exception("Epic private key not configured")
+        except Exception as e:
+            print(f"❌ Epic auth error: {e}")
+            raise
+    
+    def _get_athena_token(self) -> str:
+        """Get OAuth2 access token for athenahealth using client credentials."""
+        # Check if we have a valid cached token
+        if FHIRClient._athena_token and time.time() < FHIRClient._athena_token_expires - 60:
+            return FHIRClient._athena_token
+        
+        try:
+            # athenahealth uses standard OAuth2 client credentials
+            response = requests.post(
+                settings.athena_token_url,
+                data={
+                    "grant_type": "client_credentials",
+                    "scope": "system/Patient.read system/Condition.read system/MedicationRequest.read system/Observation.read system/AllergyIntolerance.read system/Encounter.read system/Practitioner.read"
+                },
+                auth=(settings.athena_client_id, settings.athena_client_secret),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                FHIRClient._athena_token = data["access_token"]
+                FHIRClient._athena_token_expires = time.time() + data.get("expires_in", 3600)
+                print(f"✅ athenahealth OAuth token obtained successfully")
+                return FHIRClient._athena_token
+            else:
+                print(f"❌ athenahealth OAuth failed: {response.status_code} - {response.text}")
+                raise Exception(f"athenahealth OAuth failed: {response.text}")
+                
+        except Exception as e:
+            print(f"❌ athenahealth auth error: {e}")
+            raise
     
     def _make_request(self, method: str, url: str, body: str = "") -> requests.Response:
-        """Make a request - signed for HealthLake, plain for demo mode."""
-        if self.demo_mode:
+        """Make a request with appropriate authentication."""
+        if self.auth_type == "sigv4":
+            # AWS HealthLake - sign with SigV4
+            return self._sign_request(method, url, body)
+        elif self.auth_type == "epic_jwt":
+            # Epic - use OAuth2 bearer token
+            try:
+                token = self._get_epic_token()
+                headers = {
+                    "Accept": "application/fhir+json",
+                    "Authorization": f"Bearer {token}"
+                }
+                return requests.request(method=method, url=url, headers=headers, timeout=30)
+            except Exception as e:
+                print(f"Epic auth failed, trying without auth: {e}")
+                headers = {"Accept": "application/fhir+json"}
+                return requests.request(method=method, url=url, headers=headers, timeout=30)
+        elif self.auth_type == "athena_oauth":
+            # athenahealth - use OAuth2 bearer token
+            try:
+                token = self._get_athena_token()
+                headers = {
+                    "Accept": "application/fhir+json",
+                    "Authorization": f"Bearer {token}"
+                }
+                return requests.request(method=method, url=url, headers=headers, timeout=30)
+            except Exception as e:
+                print(f"athenahealth auth failed: {e}")
+                raise
+        else:
             # Public FHIR server - no auth needed
             headers = {"Accept": "application/fhir+json"}
             return requests.request(method=method, url=url, headers=headers, timeout=30)
-        else:
-            # AWS HealthLake - sign with SigV4
-            return self._sign_request(method, url, body)
     
     def _sign_request(self, method: str, url: str, body: str = "") -> requests.Response:
         """Sign request with AWS SigV4 and execute."""
@@ -111,6 +288,10 @@ class HealthLakeClient:
 
     def search_patients(self, count: int = 50, practitioner_id: Optional[str] = None) -> List[PatientBasic]:
         """Search for patients in FHIR server, optionally filtered by practitioner encounters."""
+        # Epic sandbox requires known patient IDs - unrestricted searches return empty
+        if self.source == "epic":
+            return self._get_epic_test_patients(count)
+        
         if practitioner_id:
             # Find patients who have had encounters with this practitioner
             return self._get_patients_by_practitioner_encounters(practitioner_id, count)
@@ -132,6 +313,20 @@ class HealthLakeClient:
         except Exception as e:
             print(f"Error searching patients: {e}")
             return []
+    
+    def _get_epic_test_patients(self, count: int = 50) -> List[PatientBasic]:
+        """Get Epic test patients by their known IDs."""
+        patients = []
+        for test_patient in EPIC_TEST_PATIENTS[:count]:
+            try:
+                url = f"{self.endpoint}/Patient/{test_patient['id']}"
+                response = self._make_request("GET", url)
+                if response.status_code == 200:
+                    resource = response.json()
+                    patients.append(self._parse_patient_basic(resource))
+            except Exception as e:
+                print(f"Error fetching Epic patient {test_patient['id']}: {e}")
+        return patients
     
     def _get_patients_by_practitioner_encounters(self, practitioner_id: str, count: int = 50) -> List[PatientBasic]:
         """Get patients who have had encounters with a specific practitioner."""
@@ -492,4 +687,8 @@ class HealthLakeClient:
             date=date,
             reason=reason
         )
+
+
+# Backwards compatibility alias
+HealthLakeClient = FHIRClient
 

@@ -2,6 +2,15 @@
  * TypeScript type definitions
  */
 
+// FHIR Data Source options
+export type FHIRSource = 'healthlake' | 'epic' | 'demo';
+
+export interface FHIRSourceOption {
+  id: FHIRSource;
+  name: string;
+  description: string;
+}
+
 export interface PractitionerBasic {
   id: string;
   name: string;

@@ -3,7 +3,7 @@
  */
 import axios from 'axios';
 import { config } from '../config';
-import { PatientBasic, PatientData, SummaryResponse, ChatMessage, ChatResponse, PractitionerBasic } from '../types';
+import { PatientBasic, PatientData, SummaryResponse, ChatMessage, ChatResponse, PractitionerBasic, FHIRSource, FHIRSourceOption } from '../types';
 
 const api = axios.create({
   baseURL: config.apiUrl,
@@ -13,23 +13,42 @@ const api = axios.create({
   },
 });
 
+// Helper to add fhir_source to URL params
+const addFhirSource = (url: string, fhirSource?: FHIRSource): string => {
+  if (fhirSource) {
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}fhir_source=${fhirSource}`;
+  }
+  return url;
+};
+
 export const apiService = {
+  /**
+   * Get available FHIR sources
+   */
+  async getFhirSources(): Promise<{ sources: FHIRSourceOption[]; default: FHIRSource }> {
+    const response = await api.get('/api/fhir-sources');
+    return response.data;
+  },
+
   /**
    * Get list of practitioners
    */
-  async getPractitioners(count: number = 50): Promise<PractitionerBasic[]> {
-    const response = await api.get(`/api/practitioners?count=${count}`);
+  async getPractitioners(count: number = 50, fhirSource?: FHIRSource): Promise<PractitionerBasic[]> {
+    const url = addFhirSource(`/api/practitioners?count=${count}`, fhirSource);
+    const response = await api.get(url);
     return response.data.practitioners;
   },
 
   /**
    * Get list of patients, optionally filtered by practitioner
    */
-  async getPatients(count: number = 50, practitionerId?: string): Promise<PatientBasic[]> {
+  async getPatients(count: number = 50, practitionerId?: string, fhirSource?: FHIRSource): Promise<PatientBasic[]> {
     let url = `/api/patients?count=${count}`;
     if (practitionerId) {
       url += `&practitioner_id=${practitionerId}`;
     }
+    url = addFhirSource(url, fhirSource);
     const response = await api.get(url);
     return response.data.patients;
   },
@@ -37,16 +56,18 @@ export const apiService = {
   /**
    * Get patient data
    */
-  async getPatientData(patientId: string): Promise<PatientData> {
-    const response = await api.get(`/api/patients/${patientId}`);
+  async getPatientData(patientId: string, fhirSource?: FHIRSource): Promise<PatientData> {
+    const url = addFhirSource(`/api/patients/${patientId}`, fhirSource);
+    const response = await api.get(url);
     return response.data;
   },
 
   /**
    * Generate summary for patient
    */
-  async generateSummary(patientId: string): Promise<SummaryResponse> {
-    const response = await api.post(`/api/patients/${patientId}/summary`);
+  async generateSummary(patientId: string, fhirSource?: FHIRSource): Promise<SummaryResponse> {
+    const url = addFhirSource(`/api/patients/${patientId}/summary`, fhirSource);
+    const response = await api.post(url);
     return response.data;
   },
 
@@ -56,9 +77,11 @@ export const apiService = {
   async askQuestion(
     patientId: string,
     question: string,
-    conversationHistory: ChatMessage[] = []
+    conversationHistory: ChatMessage[] = [],
+    fhirSource?: FHIRSource
   ): Promise<ChatResponse> {
-    const response = await api.post(`/api/patients/${patientId}/chat`, {
+    const url = addFhirSource(`/api/patients/${patientId}/chat`, fhirSource);
+    const response = await api.post(url, {
       patient_id: patientId,
       question,
       conversation_history: conversationHistory,

@@ -1,0 +1,13 @@
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "alg": "RS384",
+      "use": "sig",
+      "kid": "chart-agent-key-1",
+      "n": "y8XrkBdGJO_ICywKZ7E1rUk88u_HIAAKQCZPt8yY9FrphayLRl8x3zFwggm3Z_pa0haXh70Vb2Ogt9YcsGU7E-NTjRG833JLdxmfuPWDmlOckpr41L5jvrc9FugFP807OzUW7BVvF7sqLPNJdaJyuRGjGXYwaz1NALWDwaKhVni6KjPJaZQZ-TM43gYeCuvjoxZk18Ztp-92opiWRiLiuhJZjxw2OmqXkW4r_REBI1VVzVzHIG7HeNhVqEJ_imNQRrGFwDDr0Nd3nkLVI-2qOso2rDrWpG3_dMVxY6jT_AM1vEeQMMxS3E4BMYVig03CQBJXWtm4tdvFSqj0wv8qLQ",
+      "e": "AQAB"
+    }
+  ]
+}
+

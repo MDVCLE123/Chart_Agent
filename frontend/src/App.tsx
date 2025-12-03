@@ -18,6 +18,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PatientList } from './components/PatientList';
 import { PatientSummary } from './components/PatientSummary';
 import { ChatInterface } from './components/ChatInterface';
+import { FHIRSource } from './types';
 
 // Create MUI theme
 const theme = createTheme({
@@ -55,10 +56,18 @@ const queryClient = new QueryClient({
 function App() {
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [selectedPatientName, setSelectedPatientName] = useState<string>('');
+  const [fhirSource, setFhirSource] = useState<FHIRSource>('healthlake');
 
   const handlePatientSelect = (patientId: string, patientName?: string) => {
     setSelectedPatientId(patientId);
     setSelectedPatientName(patientName || '');
+  };
+
+  const handleFhirSourceChange = (source: FHIRSource) => {
+    setFhirSource(source);
+    // Clear patient selection when source changes
+    setSelectedPatientId(null);
+    setSelectedPatientName('');
   };
 
   return (
@@ -90,6 +99,8 @@ function App() {
                     handlePatientSelect(id, 'Selected Patient');
                   }}
                   selectedPatientId={selectedPatientId || undefined}
+                  fhirSource={fhirSource}
+                  onFhirSourceChange={handleFhirSourceChange}
                 />
               </Grid>
 
@@ -97,11 +108,12 @@ function App() {
               <Grid item xs={12} md={9}>
                 {selectedPatientId ? (
                   <Box>
-                    <PatientSummary patientId={selectedPatientId} />
+                    <PatientSummary patientId={selectedPatientId} fhirSource={fhirSource} />
                     <Box mt={3}>
                       <ChatInterface
                         patientId={selectedPatientId}
                         patientName={selectedPatientName}
+                        fhirSource={fhirSource}
                       />
                     </Box>
                   </Box>

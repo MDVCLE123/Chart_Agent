@@ -17,14 +17,15 @@ import {
 } from '@mui/material';
 import { Send, QuestionAnswer } from '@mui/icons-material';
 import { apiService } from '../services/api';
-import { ChatMessage } from '../types';
+import { ChatMessage, FHIRSource } from '../types';
 
 interface ChatInterfaceProps {
   patientId: string;
   patientName: string;
+  fhirSource?: FHIRSource;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ patientId, patientName }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ patientId, patientName, fhirSource }) => {
   const [question, setQuestion] = useState('');
   const [conversation, setConversation] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,7 +45,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ patientId, patient
       setLoading(true);
       setError(null);
 
-      const response = await apiService.askQuestion(patientId, question, conversation);
+      const response = await apiService.askQuestion(patientId, question, conversation, fhirSource);
 
       setConversation(response.conversation_history);
       setQuestion('');

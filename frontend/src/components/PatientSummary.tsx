@@ -18,13 +18,14 @@ import {
 } from '@mui/material';
 import { AutoAwesome, Refresh } from '@mui/icons-material';
 import { apiService } from '../services/api';
-import { PatientData, SummaryResponse } from '../types';
+import { PatientData, SummaryResponse, FHIRSource } from '../types';
 
 interface PatientSummaryProps {
   patientId: string;
+  fhirSource?: FHIRSource;
 }
 
-export const PatientSummary: React.FC<PatientSummaryProps> = ({ patientId }) => {
+export const PatientSummary: React.FC<PatientSummaryProps> = ({ patientId, fhirSource }) => {
   const [patientData, setPatientData] = useState<PatientData | null>(null);
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [loadingData, setLoadingData] = useState(false);
@@ -34,14 +35,15 @@ export const PatientSummary: React.FC<PatientSummaryProps> = ({ patientId }) => 
   useEffect(() => {
     if (patientId) {
       loadPatientData();
+      setSummary(null); // Clear summary when patient or source changes
     }
-  }, [patientId]);
+  }, [patientId, fhirSource]);
 
   const loadPatientData = async () => {
     try {
       setLoadingData(true);
       setError(null);
-      const data = await apiService.getPatientData(patientId);
+      const data = await apiService.getPatientData(patientId, fhirSource);
       setPatientData(data);
     } catch (err: any) {
       setError(err.message || 'Failed to load patient data');
@@ -54,7 +56,7 @@ export const PatientSummary: React.FC<PatientSummaryProps> = ({ patientId }) => 
     try {
       setLoadingSummary(true);
       setError(null);
-      const result = await apiService.generateSummary(patientId);
+      const result = await apiService.generateSummary(patientId, fhirSource);
       setSummary(result);
     } catch (err: any) {
       setError(err.message || 'Failed to generate summary');

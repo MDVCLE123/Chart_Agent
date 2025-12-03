@@ -15,10 +15,15 @@ services:
       - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID:-us.anthropic.claude-sonnet-4-20250514-v1:0}
       - USE_DEMO_MODE=${USE_DEMO_MODE:-true}
       - DEMO_FHIR_SERVER=${DEMO_FHIR_SERVER:-https://hapi.fhir.org/baseR4}
+      - EPIC_CLIENT_ID=${EPIC_CLIENT_ID:-5f2384c3-5bb4-484f-a528-068177894d81}
+      - EPIC_PRIVATE_KEY_PATH=/app/keys/epic_private_key.pem
+      - ATHENA_CLIENT_ID=${ATHENA_CLIENT_ID:-0oa1048xe2u6ejB4j298}
+      - ATHENA_CLIENT_SECRET=${ATHENA_CLIENT_SECRET}
       - ENVIRONMENT=development
       - CORS_ORIGINS=["http://localhost:3000","http://localhost:80"]
     volumes:
       - ./backend/app:/app/app  # Hot reload for development
+      - ./keys:/app/keys  # Epic keys for JWT auth
     networks:
       - chart-agent-network
     healthcheck:

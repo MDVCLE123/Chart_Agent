@@ -9,9 +9,14 @@ A complete, production-ready Chart Preparation Agent with:
 - ✅ Python FastAPI backend with AWS HealthLake and Bedrock integration
 - ✅ React TypeScript frontend with Material-UI
 - ✅ Docker containerization for both services
+- ✅ **Multi-source FHIR support**:
+  - AWS HealthLake (your data)
+  - Epic Sandbox (7 test patients) ✅ Working
+  - athenahealth Sandbox (OAuth ready)
+  - Demo/HAPI FHIR (public test data)
+- ✅ Claude Sonnet 4 for AI summarization
 - ✅ Complete Pulumi infrastructure for AWS deployment (Python!)
 - ✅ Helper scripts for one-command deployment
-- ✅ Epic FHIR sandbox integration ready
 - ✅ Cost-optimized configuration ($0-15/month for development)
 
 ## Prerequisites
@@ -54,36 +59,45 @@ cp backend/.env.example backend/.env
 # HEALTHLAKE_DATASTORE_ENDPOINT=https://healthlake.us-east-1.amazonaws.com/datastore/YOUR-ID/r4/
 ```
 
-### Step 3: Run Locally (Recommended for Development)
+### Step 3: Run Locally with Docker (Recommended)
 
 ```bash
-# Start minimal AWS infrastructure
-./scripts/start-dev.sh
+# Create .env file in project root with your credentials:
+cat > .env << 'EOF'
+AWS_REGION=us-east-2
+AWS_ACCESS_KEY_ID=your-key
+AWS_SECRET_ACCESS_KEY=your-secret
+HEALTHLAKE_DATASTORE_ENDPOINT=https://healthlake.us-east-2.amazonaws.com/datastore/YOUR-ID/r4/
+BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
+USE_DEMO_MODE=false
+EOF
 
-# Terminal 1 - Backend
-cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+# Start with Docker Compose
+docker-compose up -d --build
 
-# Terminal 2 - Frontend
-cd frontend
-npm install
-npm start
+# View logs
+docker-compose logs -f
 ```
 
-**Access**: http://localhost:3000
+**Access**: 
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000/docs
 
 **Cost**: ~$0-5/month
 
 ### Step 4: Test with Real Data
 
 1. Open http://localhost:3000
-2. You should see a patient list (from HealthLake synthetic data)
+2. **Select a FHIR Source** from the dropdown:
+   - **AWS HealthLake**: Your Synthea synthetic patients
+   - **Epic Sandbox**: 7 real Epic test patients (Camila Lopez, Derrick Lin, etc.)
+   - **Public FHIR Server**: Demo data from HAPI FHIR
 3. Click a patient to view their details
-4. Click "Generate Summary" to see Claude AI in action
-5. Try asking questions in the chat interface
+4. Click "Generate Summary" to see Claude Sonnet 4 in action
+5. Try asking questions in the chat interface:
+   - "What medications is this patient on?"
+   - "Summarize recent lab results"
+   - "Any allergies I should know about?"
 
 ## Alternative: Deploy to AWS (Full Stack)
 
@@ -113,21 +127,30 @@ When done testing:
 Chart_Agent/
 ├── backend/              # Python FastAPI backend
 │   ├── app/
-│   │   ├── main.py              # FastAPI application
-│   │   ├── healthlake_client.py # HealthLake FHIR client
-│   │   ├── epic_client.py       # Epic FHIR client
-│   │   ├── bedrock_service.py   # Claude AI integration
-│   │   └── models.py            # Pydantic data models
+│   │   ├── main.py              # FastAPI application & endpoints
+│   │   ├── healthlake_client.py # Multi-source FHIR client
+│   │   │                        # (HealthLake, Epic, athenahealth, Demo)
+│   │   ├── bedrock_service.py   # Claude Sonnet 4 integration
+│   │   ├── models.py            # Pydantic data models
+│   │   └── config.py            # Configuration settings
 │   ├── Dockerfile
 │   └── requirements.txt
 │
 ├── frontend/             # React TypeScript frontend
 │   ├── src/
-│   │   ├── components/          # React components
-│   │   ├── services/api.ts      # API client
-│   │   └── App.tsx              # Main app
+│   │   ├── components/
+│   │   │   ├── PatientList.tsx      # Patient list with FHIR source dropdown
+│   │   │   ├── PatientSummary.tsx   # Patient details & AI summary
+│   │   │   └── ChatInterface.tsx    # Follow-up questions
+│   │   ├── services/api.ts          # API client with FHIR source param
+│   │   └── App.tsx                  # Main app
 │   ├── Dockerfile
 │   └── package.json
+│
+├── keys/                 # Epic JWT keys (gitignored)
+│   ├── epic_private_key.pem
+│   ├── epic_public_key.pem
+│   └── jwks.json
 │
 ├── infrastructure/       # Pulumi Infrastructure (Python)
 │   ├── __main__.py              # Infrastructure code
@@ -142,6 +165,9 @@ Chart_Agent/
 │   ├── teardown.sh
 │   └── build-and-push.sh
 │
+├── docker-compose.yml    # Local development with Docker
+├── .env                  # Environment variables (gitignored)
+│
 └── docs/                 # Documentation
     ├── AWS_SETUP.md
     └── EPIC_INTEGRATION.md
@@ -149,18 +175,23 @@ Chart_Agent/
 
 ## Development Workflow
 
-### Daily Development
+### Daily Development with Docker
 
 ```bash
-# Run everything locally (fast iteration)
-# Terminal 1: Backend
-cd backend && uvicorn app.main:app --reload
+# Start all services
+docker-compose up -d
 
-# Terminal 2: Frontend
-cd frontend && npm start
+# Watch logs
+docker-compose logs -f
+
+# Rebuild after code changes
+docker-compose up -d --build
+
+# Stop services
+docker-compose down
 ```
 
-**Hot reload enabled**: Code changes automatically reflect
+**Hot reload enabled**: Backend code changes automatically reflect via volume mounts
 
 ### Weekly Testing
 
@@ -329,10 +360,17 @@ Integrate AWS Cognito for provider authentication:
 
 | Mode | Services | Monthly Cost |
 |------|----------|--------------|
-| **Local Dev** (Recommended) | HealthLake + Bedrock usage only | $0-5 |
-| **Part-time Testing** | + ECS + ALB (4 hours/week) | $5-15 |
+| **Docker Dev** (Recommended) | HealthLake + Bedrock usage only | ~$45-60 |
+| **Part-time Testing** | + ECS + ALB (4 hours/week) | $60-80 |
 | **Full-time Running** | All services 24/7 | $100-150 |
 | **Destroyed** | Nothing | $0 |
+
+**Daily Cost Breakdown**:
+- HealthLake: ~$1.44/day ($0.06/hour)
+- Bedrock (Claude Sonnet 4): ~$0.01-0.05 per summary
+- S3 (JWKS hosting): < $0.01/day
+
+**Tip**: Delete HealthLake datastore when not in use to save costs!
 
 ## You're Ready! 🚀
 
