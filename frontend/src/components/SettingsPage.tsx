@@ -57,6 +57,9 @@ const DATA_SOURCES: DataSourceOption[] = [
   { id: 'athena', name: 'athenahealth', icon: '💚' },
 ];
 
+// Admin user identifier - matches backend protection
+const ADMIN_EMAIL = 'admin@chartagent.local';
+
 export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
   const [users, setUsers] = useState<UserResponse[]>([]);
   const [practitioners, setPractitioners] = useState<PractitionerBasic[]>([]);
@@ -72,19 +75,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
 
   // Form state
   const [formData, setFormData] = useState<{
-    username: string;
-    password: string;
     email: string;
-    full_name: string;
+    password: string;
+    first_name: string;
+    last_name: string;
     role: string;
     allowed_data_sources: string[];
     practitioner_id: string;
     practitioner_name: string;
   }>({
-    username: '',
-    password: '',
     email: '',
-    full_name: '',
+    password: '',
+    first_name: '',
+    last_name: '',
     role: 'user',
     allowed_data_sources: ['healthlake'],
     practitioner_id: '',
@@ -116,10 +119,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
   const handleOpenCreate = () => {
     setEditingUser(null);
     setFormData({
-      username: '',
-      password: '',
       email: '',
-      full_name: '',
+      password: '',
+      first_name: '',
+      last_name: '',
       role: 'user',
       allowed_data_sources: ['healthlake'],
       practitioner_id: '',
@@ -131,10 +134,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
   const handleOpenEdit = (user: UserResponse) => {
     setEditingUser(user);
     setFormData({
-      username: user.username,
+      email: user.email || user.username || '',
       password: '',
-      email: user.email || '',
-      full_name: user.full_name || '',
+      first_name: user.first_name || '',
+      last_name: user.last_name || '',
       role: user.role,
       allowed_data_sources: user.allowed_data_sources,
       practitioner_id: user.practitioner_id || '',
@@ -155,7 +158,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
         // Update existing user
         const updateData: UserUpdate = {
           email: formData.email || undefined,
-          full_name: formData.full_name || undefined,
+          first_name: formData.first_name || undefined,
+          last_name: formData.last_name || undefined,
           role: formData.role,
           allowed_data_sources: formData.allowed_data_sources,
           practitioner_id: formData.practitioner_id || undefined,
@@ -165,25 +169,25 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
           updateData.password = formData.password;
         }
         await authService.updateUser(editingUser.username, updateData);
-        setSuccess(`User "${editingUser.username}" updated successfully`);
+        setSuccess(`User "${formData.email}" updated successfully`);
       } else {
         // Create new user
-        if (!formData.username || !formData.password) {
-          setError('Username and password are required');
+        if (!formData.email || !formData.password) {
+          setError('Email and password are required');
           return;
         }
         const createData: UserCreate = {
-          username: formData.username,
+          email: formData.email,
           password: formData.password,
-          email: formData.email || undefined,
-          full_name: formData.full_name || undefined,
+          first_name: formData.first_name || undefined,
+          last_name: formData.last_name || undefined,
           role: formData.role,
           allowed_data_sources: formData.allowed_data_sources,
           practitioner_id: formData.practitioner_id || undefined,
           practitioner_name: formData.practitioner_name || undefined,
         };
         await authService.createUser(createData);
-        setSuccess(`User "${formData.username}" created successfully`);
+        setSuccess(`User "${formData.email}" created successfully`);
       }
       handleCloseDialog();
       loadData();
@@ -290,10 +294,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
                   <TableCell>
                     <Box display="flex" alignItems="center" gap={1}>
                       <Person fontSize="small" color="action" />
-                      {user.username}
+                      {user.email || user.username}
                     </Box>
                   </TableCell>
-                  <TableCell>{user.full_name || '-'}</TableCell>
+                  <TableCell>
+                    {user.first_name || user.last_name
+                      ? `${user.first_name || ''} ${user.last_name || ''}`.trim()
+                      : '-'}
+                  </TableCell>
                   <TableCell>{user.email || '-'}</TableCell>
                   <TableCell>
                     <Chip
@@ -342,7 +350,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
                         <Edit fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    {user.username !== 'admin' && (
+                    {(user.email !== ADMIN_EMAIL && user.username !== ADMIN_EMAIL) && (
                       <Tooltip title="Delete">
                         <IconButton
                           onClick={() => {
@@ -367,20 +375,25 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
       {/* Create/Edit User Dialog */}
       <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {editingUser ? `Edit User: ${editingUser.username}` : 'Create New User'}
+          {editingUser ? `Edit User: ${editingUser.email || editingUser.username}` : 'Create New User'}
         </DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* Username (only for create) */}
-            {!editingUser && (
-              <TextField
-                label="Username"
-                value={formData.username}
-                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                required
-                fullWidth
-              />
-            )}
+            {/* Email (Username) */}
+            <TextField
+              label="Email (Username)"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              required
+              fullWidth
+              disabled={editingUser?.role === 'admin' && editingUser?.email === ADMIN_EMAIL}
+              helperText={
+                editingUser?.role === 'admin' && editingUser?.email === ADMIN_EMAIL
+                  ? 'Admin email cannot be changed'
+                  : 'Email address is used as the username for login'
+              }
+            />
 
             {/* Password */}
             <TextField
@@ -392,20 +405,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
               fullWidth
             />
 
-            {/* Full Name */}
+            {/* First Name */}
             <TextField
-              label="Full Name"
-              value={formData.full_name}
-              onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+              label="First Name"
+              value={formData.first_name}
+              onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
               fullWidth
             />
 
-            {/* Email */}
+            {/* Last Name */}
             <TextField
-              label="Email"
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              label="Last Name"
+              value={formData.last_name}
+              onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
               fullWidth
             />
 

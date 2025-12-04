@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     # Bedrock Configuration
     bedrock_model_id: str = "us.anthropic.claude-sonnet-4-20250514-v1:0"
     
+    # Cognito Configuration
+    use_cognito: bool = True  # Set to True to use AWS Cognito for auth
+    cognito_region: str = "us-east-2"
+    cognito_user_pool_id: str = ""
+    cognito_client_id: str = ""
+    cognito_client_secret: str = ""
+    
     # Application Configuration
     environment: str = "development"
     debug: bool = True

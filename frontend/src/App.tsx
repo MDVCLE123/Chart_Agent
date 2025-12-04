@@ -114,7 +114,11 @@ const AppContent: React.FC = () => {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Chip
                 icon={<Person sx={{ fontSize: 18 }} />}
-                label={user?.full_name || user?.username}
+                label={
+                  user?.first_name || user?.last_name
+                    ? `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
+                    : user?.email || user?.username
+                }
                 size="small"
                 sx={{
                   backgroundColor: 'rgba(255, 255, 255, 0.15)',
@@ -161,7 +165,11 @@ const AppContent: React.FC = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Chip
               icon={<Person sx={{ fontSize: 18 }} />}
-              label={user?.full_name || user?.username}
+              label={
+                user?.first_name || user?.last_name
+                  ? `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
+                  : user?.email || user?.username
+              }
               size="small"
               sx={{
                 backgroundColor: 'rgba(255, 255, 255, 0.15)',

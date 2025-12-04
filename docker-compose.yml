@@ -21,6 +21,12 @@ services:
       - ATHENA_PRIVATE_KEY_PATH=/app/keys/epic_private_key.pem
       - ATHENA_PRACTICE_ID=${ATHENA_PRACTICE_ID:-195900}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-chart-agent-secret-key-change-in-production-2024}
+      # Cognito Configuration (REQUIRED - set in .env file)
+      - USE_COGNITO=${USE_COGNITO:-true}
+      - COGNITO_REGION=${COGNITO_REGION}
+      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
+      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
+      - COGNITO_CLIENT_SECRET=${COGNITO_CLIENT_SECRET}
       - ENVIRONMENT=development
       - CORS_ORIGINS=["http://localhost:3000","http://localhost:80"]
     volumes:

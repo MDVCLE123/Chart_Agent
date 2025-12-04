@@ -12,13 +12,27 @@ from app.models import (
 )
 from app.healthlake_client import get_fhir_client, FHIR_SOURCES
 from app.bedrock_service import BedrockService
-from app.auth import (
-    authenticate_user, create_access_token, get_current_user, require_admin,
-    Token, LoginRequest, User, ACCESS_TOKEN_EXPIRE_MINUTES,
-    UserCreate, UserUpdate, UserResponse,
-    get_all_users, create_user, update_user, delete_user,
-    AVAILABLE_DATA_SOURCES
-)
+
+# Choose auth module based on configuration
+if settings.use_cognito and settings.cognito_user_pool_id:
+    print("🔐 Using AWS Cognito for authentication")
+    from app.cognito_auth import (
+        authenticate_user, get_current_user, require_admin,
+        Token, LoginRequest, User,
+        UserCreate, UserUpdate, UserResponse,
+        get_all_users, create_user, update_user, delete_user,
+    )
+    USE_COGNITO = True
+else:
+    print("🔐 Using local authentication")
+    from app.auth import (
+        authenticate_user, create_access_token, get_current_user, require_admin,
+        Token, LoginRequest, User, ACCESS_TOKEN_EXPIRE_MINUTES,
+        UserCreate, UserUpdate, UserResponse,
+        get_all_users, create_user, update_user, delete_user,
+        AVAILABLE_DATA_SOURCES
+    )
+    USE_COGNITO = False
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -229,51 +243,82 @@ async def root():
 
 # ============== Authentication Endpoints ==============
 
-@app.post("/api/auth/login", response_model=Token)
+@app.post("/api/auth/login")
 async def login(request: LoginRequest):
-    """Authenticate user and return JWT token."""
-    user = authenticate_user(request.username, request.password)
-    if not user:
+    """Authenticate user and return token."""
+    result = authenticate_user(request.username, request.password)
+    if not result:
         raise HTTPException(
             status_code=401,
             detail="Invalid username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.username, "role": user.role},
-        expires_delta=access_token_expires
-    )
-    
-    return Token(
-        access_token=access_token,
-        token_type="bearer",
-        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user={
-            "username": user.username,
-            "full_name": user.full_name,
-            "email": user.email,
-            "role": user.role,
-            "allowed_data_sources": user.allowed_data_sources,
-            "practitioner_id": user.practitioner_id,
-            "practitioner_name": user.practitioner_name
+    if USE_COGNITO:
+        # Cognito returns all token info directly
+        return {
+            "access_token": result['access_token'],
+            "id_token": result.get('id_token', ''),
+            "refresh_token": result.get('refresh_token', ''),
+            "token_type": "bearer",
+            "expires_in": result.get('expires_in', 3600),
+            "user": result['user']
         }
-    )
+    else:
+        # Local auth - create JWT token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": result.username, "role": result.role},
+            expires_delta=access_token_expires
+        )
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            "user": {
+                "username": result.email or result.username,
+                "email": result.email or result.username,
+                "first_name": result.first_name,
+                "last_name": result.last_name,
+                "role": result.role,
+                "allowed_data_sources": result.allowed_data_sources,
+                "practitioner_id": result.practitioner_id,
+                "practitioner_name": result.practitioner_name
+            }
+        }
 
 
 @app.get("/api/auth/me")
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """Get current authenticated user info."""
-    return {
-        "username": current_user.username,
-        "full_name": current_user.full_name,
-        "email": current_user.email,
-        "role": current_user.role,
-        "allowed_data_sources": current_user.allowed_data_sources,
-        "practitioner_id": current_user.practitioner_id,
-        "practitioner_name": current_user.practitioner_name
-    }
+    # Handle both Cognito (has first_name/last_name) and local auth (may not)
+    if hasattr(current_user, 'first_name'):
+        # Cognito or updated local auth
+        return {
+            "username": current_user.email or current_user.username,
+            "email": current_user.email or current_user.username,
+            "first_name": current_user.first_name,
+            "last_name": current_user.last_name,
+            "role": current_user.role,
+            "allowed_data_sources": current_user.allowed_data_sources,
+            "practitioner_id": current_user.practitioner_id,
+            "practitioner_name": current_user.practitioner_name
+        }
+    else:
+        # Legacy local auth with full_name - convert to first/last
+        full_name = getattr(current_user, 'full_name', None) or ''
+        name_parts = full_name.split(' ', 1) if full_name else []
+        return {
+            "username": current_user.email or current_user.username,
+            "email": current_user.email or current_user.username,
+            "first_name": name_parts[0] if len(name_parts) > 0 else None,
+            "last_name": name_parts[1] if len(name_parts) > 1 else None,
+            "role": current_user.role,
+            "allowed_data_sources": current_user.allowed_data_sources,
+            "practitioner_id": current_user.practitioner_id,
+            "practitioner_name": current_user.practitioner_name
+        }
 
 
 @app.post("/api/auth/verify")

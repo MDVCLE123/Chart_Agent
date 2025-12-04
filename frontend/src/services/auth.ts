@@ -6,9 +6,10 @@ import axios from 'axios';
 import { config } from '../config';
 
 export interface AuthUser {
-  username: string;
-  full_name: string | null;
+  username: string;  // Email address (defaults to email)
   email: string | null;
+  first_name: string | null;
+  last_name: string | null;
   role: string;
   allowed_data_sources: string[];
   practitioner_id: string | null;
@@ -23,10 +24,10 @@ export interface LoginResponse {
 }
 
 export interface UserCreate {
-  username: string;
+  email: string;  // Username defaults to email
   password: string;
-  email?: string;
-  full_name?: string;
+  first_name?: string;
+  last_name?: string;
   role: string;
   allowed_data_sources: string[];
   practitioner_id?: string;
@@ -35,7 +36,8 @@ export interface UserCreate {
 
 export interface UserUpdate {
   email?: string;
-  full_name?: string;
+  first_name?: string;
+  last_name?: string;
   password?: string;
   disabled?: boolean;
   role?: string;
@@ -45,9 +47,10 @@ export interface UserUpdate {
 }
 
 export interface UserResponse {
-  username: string;
+  username: string;  // Email address (displayed as username)
   email: string | null;
-  full_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
   disabled: boolean;
   role: string;
   allowed_data_sources: string[];

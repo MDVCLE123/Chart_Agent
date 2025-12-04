@@ -30,6 +30,8 @@
 
 - **Frontend** = Website that doctors see in their browser
 - **Backend** = Server that processes requests (like a restaurant kitchen)
+- **Authentication** = AWS Cognito manages user logins and permissions
+- **User Management** = Admin can create users, assign roles, and control data access
 - **FHIR Data Sources** = Where patient data comes from:
   - ☁️ AWS HealthLake (your own data store - 48 patients)
   - 🏥 Epic Sandbox (7 test patients)
@@ -249,7 +251,51 @@ You should see your account ID and user info.
 
 ## Phase 1: AWS Setup
 
-### 1.1 Create HealthLake Data Store (15 minutes)
+### 1.1 Set Up AWS Cognito (10 minutes)
+
+Cognito manages user authentication and access control.
+
+**Steps:**
+
+1. **Run the setup script:**
+   ```bash
+   cd /path/to/Chart_Agent
+   chmod +x scripts/setup-cognito.sh
+   ./scripts/setup-cognito.sh
+   ```
+
+2. **The script will:**
+   - Create a Cognito User Pool
+   - Create an App Client
+   - Set up user groups (admins, users)
+   - Display configuration values
+
+3. **Copy the output** - You'll see something like:
+   ```
+   COGNITO_USER_POOL_ID=us-east-2_xxxxx
+   COGNITO_CLIENT_ID=xxxxx
+   COGNITO_CLIENT_SECRET=xxxxx
+   COGNITO_REGION=us-east-2
+   ```
+
+4. **Create the admin user:**
+   ```bash
+   export COGNITO_USER_POOL_ID=us-east-2_xxxxx
+   chmod +x scripts/create-cognito-admin.sh
+   ./scripts/create-cognito-admin.sh
+   ```
+
+5. **Default admin credentials:**
+   - **Email**: `admin@chartagent.local`
+   - **Password**: `ChartAgent2024!`
+
+**What you just did**: Created a secure user authentication system. Users must log in before accessing patient data.
+
+**Cost**: First 50,000 monthly active users are **FREE**! Perfect for small healthcare practices.
+
+---
+
+### 1.2 Create HealthLake Data Store (15 minutes)
 
 HealthLake stores patient medical records in FHIR format.
 
@@ -285,7 +331,7 @@ HealthLake stores patient medical records in FHIR format.
 
 ---
 
-### 1.2 Enable Bedrock AI (10-15 minutes)
+### 1.3 Enable Bedrock AI (10-15 minutes)
 
 Bedrock gives you access to Claude AI for summarizing text.
 
@@ -345,7 +391,7 @@ Bedrock gives you access to Claude AI for summarizing text.
 
 ---
 
-### 1.3 Get the Code (5 minutes)
+### 1.4 Get the Code (5 minutes)
 
 **You already have the code!** You're reading this file, which means you have the Chart_Agent folder.
 
@@ -395,6 +441,13 @@ Now let's get the application running on your computer using Docker!
 AWS_REGION=us-east-2
 AWS_ACCESS_KEY_ID=your-access-key-id
 AWS_SECRET_ACCESS_KEY=your-secret-access-key
+
+# Cognito Configuration (from setup-cognito.sh output)
+USE_COGNITO=true
+COGNITO_REGION=us-east-2
+COGNITO_USER_POOL_ID=us-east-2_xxxxx
+COGNITO_CLIENT_ID=xxxxx
+COGNITO_CLIENT_SECRET=xxxxx
 
 # HealthLake Configuration - REPLACE WITH YOUR DATASTORE ID
 HEALTHLAKE_DATASTORE_ENDPOINT=https://healthlake.us-east-2.amazonaws.com/datastore/YOUR-DATASTORE-ID/r4/
@@ -476,10 +529,18 @@ docker ps
 
 ### 2.4 Use the Application! 🎉
 
-You should now see:
-- **Top**: Data Source dropdown with 3 options
-- **Left side**: List of patients
-- **Right side**: Patient details and AI summary
+**First Time Login:**
+1. Open http://localhost:3000
+2. You'll see a **login screen**
+3. Enter credentials:
+   - **Email**: `admin@chartagent.local`
+   - **Password**: `ChartAgent2024!`
+4. Click **"Sign In"**
+
+**After Login, you'll see:**
+- **Top Bar**: Your name, Settings button (admin only), Sign Out
+- **Left Side**: Data Source dropdown + Practitioner filter + Patient list
+- **Right Side**: Patient details and AI summary
 
 **Try it out:**
 1. **Select a Data Source** from the dropdown:
@@ -496,7 +557,14 @@ You should now see:
    - "Any recent medication changes?"
    - "Summarize cardiovascular history"
 
-**Congratulations!** You're running a full healthcare AI application on your computer!
+**Admin Features:**
+- Click the **Settings** button (gear icon) in the top bar
+- Create new users
+- Assign data source permissions
+- Link users to practitioners
+- Update user information
+
+**Congratulations!** You're running a full healthcare AI application with user authentication on your computer!
 
 ---
 
@@ -554,6 +622,55 @@ athenahealth Preview API (FHIR R4).
 
 ---
 
+## Phase 2.5: User Management (Admin Only)
+
+Once logged in as admin, you can manage users:
+
+### Accessing Settings
+
+1. Click the **Settings** button (gear icon) in the top bar
+2. You'll see the **User Management** page
+
+### Creating a New User
+
+1. Click **"+ Add User"** button
+2. Fill in the form:
+   - **Email (Username)**: User's email address (used for login)
+   - **Password**: Initial password
+   - **First Name**: User's first name
+   - **Last Name**: User's last name
+   - **Role**: Admin or User
+   - **Data Source Access**: Check which FHIR sources they can access
+   - **Link to Practitioner** (optional): Auto-select this practitioner in their view
+3. Click **"Create User"**
+
+### Editing a User
+
+1. Click the **Edit** icon (pencil) next to a user
+2. Update any fields:
+   - Change email (username)
+   - Update password
+   - Modify data source permissions
+   - Link/unlink practitioner
+3. Click **"Save Changes"**
+
+### Deleting a User
+
+1. Click the **Delete** icon (trash) next to a user
+2. Confirm deletion
+3. **Note**: Admin user cannot be deleted
+
+### Understanding Permissions
+
+- **Admin Role**: Can access Settings page and manage users
+- **User Role**: Regular users, cannot access Settings
+- **Data Source Access**: Users only see data sources they're allowed to access
+- **Practitioner Linking**: When linked, that practitioner is auto-selected in the filter
+
+**Example**: Create a user with only "HealthLake" access, and they'll only see the HealthLake dropdown option and HealthLake patients.
+
+---
+
 ## Phase 3: Understanding the Code
 
 ### Backend Structure
@@ -563,6 +680,8 @@ backend/app/
 ├── main.py                 → API endpoints (routes)
 ├── healthlake_client.py    → Multi-source FHIR client (HealthLake, Epic, athenahealth)
 ├── bedrock_service.py      → Calls Claude AI for summaries
+├── cognito_auth.py         → AWS Cognito authentication & user management
+├── auth.py                 → Local auth (fallback, not used with Cognito)
 ├── models.py               → Data structures (what data looks like)
 └── config.py               → Configuration settings
 ```
@@ -573,7 +692,16 @@ backend/app/
 - Web framework for Python
 - Defines URLs like `/api/patients`
 - Handles requests from frontend
+- **Authentication**: All endpoints require login (except `/api/health`)
+- **Authorization**: Users can only access their allowed data sources
 - Accepts `fhir_source` parameter to switch between data sources
+
+**Cognito Auth (cognito_auth.py)**:
+- Manages user authentication with AWS Cognito
+- Handles login, token validation, user management
+- Supports user roles (admin, user)
+- Controls data source access per user
+- Links users to practitioners for default filtering
 
 **FHIR Client (healthlake_client.py)**:
 - Factory pattern supporting multiple FHIR sources
@@ -595,11 +723,16 @@ backend/app/
 frontend/src/
 ├── App.tsx                      → Main application component
 ├── components/
+│   ├── LoginScreen.tsx          → Login UI
+│   ├── SettingsPage.tsx         → Admin user management
 │   ├── PatientList.tsx          → Left sidebar with patients
 │   ├── PatientSummary.tsx       → Main view with patient details
 │   └── ChatInterface.tsx        → Chat box for questions
 ├── services/
-│   └── api.ts                   → API calls to backend
+│   ├── api.ts                   → API calls to backend
+│   └── auth.ts                  → Authentication API calls
+├── context/
+│   └── AuthContext.tsx         → Authentication state management
 └── types.ts                     → TypeScript type definitions
 ```
 
@@ -934,6 +1067,11 @@ This deletes all AWS resources and stops charges.
 
 | Feature | Status |
 |---------|--------|
+| AWS Cognito Authentication | ✅ Working (50K MAUs free) |
+| User Management | ✅ Working (Create, Update, Delete) |
+| Role-Based Access Control | ✅ Working (Admin/User roles) |
+| Data Source Permissions | ✅ Working (Per-user access control) |
+| Practitioner Linking | ✅ Working (Auto-filter by practitioner) |
 | AWS HealthLake | ✅ Working (48 patients) |
 | Epic Sandbox | ✅ Working (7 patients) |
 | athenahealth Sandbox | ✅ Working (7 patients) |
@@ -943,6 +1081,14 @@ This deletes all AWS resources and stops charges.
 | JWT Authentication | ✅ Working (Epic & athenahealth) |
 
 **Last Updated**: December 2024
+
+**New Features Added:**
+- 🔐 **AWS Cognito Integration**: Secure user authentication
+- 👥 **User Management**: Admin can create/edit/delete users
+- 🔑 **Access Control**: Users only see their allowed data sources
+- 👨‍⚕️ **Practitioner Linking**: Users can be linked to specific practitioners
+- 📧 **Email as Username**: Simplified login with email addresses
+- 👤 **First/Last Name**: Separate name fields for better organization
 
 **Happy coding!** 🚀
 

@@ -10,6 +10,10 @@ A web application that helps doctors prepare for patient appointments by automat
 
 | Component | Status |
 |-----------|--------|
+| AWS Cognito Authentication | ✅ Working (50K MAUs free) |
+| User Management | ✅ Working (Admin panel) |
+| Role-Based Access Control | ✅ Working |
+| Data Source Permissions | ✅ Working (Per-user) |
 | AWS HealthLake | ✅ Working (48 Synthea patients) |
 | AWS Bedrock (Claude Sonnet 4) | ✅ Working |
 | Epic FHIR Sandbox | ✅ Working (7 test patients) |
@@ -27,20 +31,25 @@ A web application that helps doctors prepare for patient appointments by automat
 │   React UI      │────▶│  FastAPI        │────▶│  FHIR Sources   │
 │   (Material-UI) │     │  Backend        │     │                 │
 │   Port 3000     │     │  Port 8000      │     │  • HealthLake   │
-└─────────────────┘     └────────┬────────┘     │  • Epic         │
-                                 │              │  • athenahealth │
-                                 ▼              └─────────────────┘
-                        ┌─────────────────┐
-                        │  AWS Bedrock    │
-                        │  Claude Sonnet 4│
-                        └─────────────────┘
+│   + Login       │     │  + Cognito Auth │     │  • Epic         │
+│   + Settings    │     │  + User Mgmt    │     │  • athenahealth │
+└─────────────────┘     └────────┬────────┘     └─────────────────┘
+                                 │
+                    ┌────────────┴────────────┐
+                    ▼                         ▼
+        ┌─────────────────┐        ┌─────────────────┐
+        │  AWS Cognito    │        │  AWS Bedrock    │
+        │  User Pool      │        │  Claude Sonnet 4│
+        └─────────────────┘        └─────────────────┘
 ```
 
 **Tech Stack:**
 - **Frontend**: React + TypeScript + Material-UI
 - **Backend**: Python FastAPI
+- **Authentication**: AWS Cognito (JWT tokens)
+- **User Management**: Admin panel for user CRUD operations
 - **AI**: AWS Bedrock (Claude Sonnet 4)
-- **Auth**: JWT (RS384) for Epic & athenahealth, SigV4 for HealthLake
+- **FHIR Auth**: JWT (RS384) for Epic & athenahealth, SigV4 for HealthLake
 - **Container**: Docker Compose
 
 ---
@@ -71,6 +80,13 @@ AWS_REGION=us-east-2
 AWS_ACCESS_KEY_ID=your-access-key
 AWS_SECRET_ACCESS_KEY=your-secret-key
 
+# Cognito Configuration (run ./scripts/setup-cognito.sh first)
+USE_COGNITO=true
+COGNITO_REGION=us-east-2
+COGNITO_USER_POOL_ID=us-east-2_xxxxx
+COGNITO_CLIENT_ID=xxxxx
+COGNITO_CLIENT_SECRET=xxxxx
+
 # HealthLake (get endpoint from AWS Console)
 HEALTHLAKE_DATASTORE_ENDPOINT=https://healthlake.us-east-2.amazonaws.com/datastore/YOUR-ID/r4/
 
@@ -94,21 +110,42 @@ docker-compose logs -f
 docker-compose ps
 ```
 
-### Step 3: Open the App
+### Step 3: Set Up Cognito (First Time Only)
+
+```bash
+# Create Cognito User Pool and App Client
+./scripts/setup-cognito.sh
+
+# Create admin user
+export COGNITO_USER_POOL_ID=us-east-2_xxxxx  # From script output
+./scripts/create-cognito-admin.sh
+```
+
+**Default Admin Credentials:**
+- **Email**: `admin@chartagent.local`
+- **Password**: `ChartAgent2024!`
+
+### Step 4: Open the App
 
 - **Frontend**: http://localhost:3000
 - **API Docs**: http://localhost:8000/docs
 
-### Step 4: Test It!
+### Step 5: Login and Test!
 
-1. Select a **Data Source** from the dropdown:
+1. **Login** with admin credentials
+2. Select a **Data Source** from the dropdown:
    - ☁️ **AWS HealthLake** - Your Synthea synthetic patients
    - 🏥 **Epic Sandbox** - 7 Epic test patients
    - 💚 **athenahealth Sandbox** - athenahealth test patients
 
-2. Click a patient name
-3. Click **"Generate Summary"**
-4. Ask follow-up questions in the chat!
+3. Click a patient name
+4. Click **"Generate Summary"**
+5. Ask follow-up questions in the chat!
+
+**Admin Features:**
+- Click **Settings** (gear icon) to manage users
+- Create users with specific data source permissions
+- Link users to practitioners for auto-filtering
 
 ---
 
@@ -119,6 +156,7 @@ Chart_Agent/
 ├── backend/                    # Python FastAPI
 │   ├── app/
 │   │   ├── main.py            # API endpoints
+│   │   ├── cognito_auth.py    # AWS Cognito authentication
 │   │   ├── healthlake_client.py  # Multi-source FHIR client
 │   │   ├── bedrock_service.py    # Claude AI integration
 │   │   ├── models.py          # Pydantic models
@@ -129,13 +167,23 @@ Chart_Agent/
 ├── frontend/                   # React TypeScript
 │   ├── src/
 │   │   ├── components/
+│   │   │   ├── LoginScreen.tsx    # Login UI
+│   │   │   ├── SettingsPage.tsx   # Admin user management
 │   │   │   ├── PatientList.tsx    # Patient list + source selector
 │   │   │   ├── PatientSummary.tsx # Details + AI summary
 │   │   │   └── ChatInterface.tsx  # Follow-up Q&A
-│   │   ├── services/api.ts    # API client
+│   │   ├── services/
+│   │   │   ├── api.ts         # API client
+│   │   │   └── auth.ts        # Authentication service
+│   │   ├── context/
+│   │   │   └── AuthContext.tsx    # Auth state management
 │   │   └── types.ts           # TypeScript types
 │   ├── Dockerfile
 │   └── package.json
+│
+├── scripts/
+│   ├── setup-cognito.sh       # Create Cognito User Pool
+│   └── create-cognito-admin.sh # Create admin user
 │
 ├── keys/                       # JWT keys (gitignored)
 │   ├── epic_private_key.pem
@@ -226,12 +274,13 @@ curl -X POST "http://localhost:8000/api/patients/{id}/summary?fhir_source=epic"
 
 | Mode | Services | Cost |
 |------|----------|------|
-| **Docker Dev** | HealthLake + Bedrock usage | ~$1.50-2.00/day |
+| **Docker Dev** | HealthLake + Bedrock + Cognito | ~$1.50-2.00/day |
 | **Stopped** | Nothing running | $0 |
 
 **Breakdown:**
 - HealthLake: ~$0.06/hour ($1.44/day)
 - Bedrock (Claude Sonnet 4): ~$0.01-0.05 per summary
+- **Cognito**: **FREE** for first 50,000 monthly active users! 🎉
 - S3 (JWKS hosting): < $0.01/day
 
 **💡 Tip**: Delete HealthLake datastore when not in use to save costs!
@@ -292,16 +341,37 @@ docker-compose up -d frontend
 
 ## 📚 API Endpoints
 
+### Public Endpoints
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/health` | GET | Health check |
+
+### Authentication Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/auth/login` | POST | Login with email/password |
+| `/api/auth/me` | GET | Get current user info |
+| `/api/auth/verify` | POST | Verify token validity |
+
+### Protected Endpoints (Require Login)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
 | `/api/fhir-sources` | GET | List available FHIR sources |
+| `/api/practitioners` | GET | List practitioners |
 | `/api/patients` | GET | List patients |
 | `/api/patients/{id}` | GET | Get patient details |
 | `/api/patients/{id}/summary` | POST | Generate AI summary |
 | `/api/patients/{id}/chat` | POST | Ask follow-up questions |
 
-All endpoints accept `?fhir_source=healthlake|epic|athena` query parameter.
+### Admin Endpoints (Admin Only)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/admin/users` | GET | List all users |
+| `/api/admin/users` | POST | Create new user |
+| `/api/admin/users/{username}` | PUT | Update user |
+| `/api/admin/users/{username}` | DELETE | Delete user |
+
+All patient/practitioner endpoints accept `?fhir_source=healthlake|epic|athena` query parameter. Users can only access their allowed data sources.
 
 ---
 
@@ -345,6 +415,11 @@ The `healthlake_client.py` uses a factory pattern - add new sources by:
 
 ## ✅ What's Working
 
+- [x] AWS Cognito authentication (50K MAUs free)
+- [x] User management (Create, Update, Delete)
+- [x] Role-based access control (Admin/User)
+- [x] Data source permissions (Per-user access)
+- [x] Practitioner linking (Auto-filter)
 - [x] AWS HealthLake with Synthea data
 - [x] AWS Bedrock with Claude Sonnet 4
 - [x] Epic FHIR Sandbox (JWT auth)
@@ -357,6 +432,13 @@ The `healthlake_client.py` uses a factory pattern - add new sources by:
 ---
 
 **Last Updated**: December 2024  
-**Version**: 2.1  
+**Version**: 2.2  
+
+**New in v2.2:**
+- 🔐 AWS Cognito authentication
+- 👥 User management system
+- 🔑 Role-based access control
+- 📊 Data source permissions
+- 👨‍⚕️ Practitioner linking
 
 🎉 **Happy Coding!**

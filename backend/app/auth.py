@@ -27,9 +27,10 @@ AVAILABLE_DATA_SOURCES = ["healthlake", "epic", "athena"]
 # Models
 class User(BaseModel):
     """User model."""
-    username: str
+    username: str  # Email address (defaults to email)
     email: Optional[str] = None
-    full_name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     disabled: bool = False
     role: str = "user"  # "admin" or "user"
     allowed_data_sources: List[str] = ["healthlake"]  # Data sources user can access
@@ -44,10 +45,10 @@ class UserInDB(User):
 
 class UserCreate(BaseModel):
     """Model for creating a new user."""
-    username: str
+    email: str  # Username defaults to email
     password: str
-    email: Optional[str] = None
-    full_name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     role: str = "user"
     allowed_data_sources: List[str] = ["healthlake"]
     practitioner_id: Optional[str] = None
@@ -56,8 +57,9 @@ class UserCreate(BaseModel):
 
 class UserUpdate(BaseModel):
     """Model for updating a user."""
-    email: Optional[str] = None
-    full_name: Optional[str] = None
+    email: Optional[str] = None  # Changing email also changes username
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     password: Optional[str] = None
     disabled: Optional[bool] = None
     role: Optional[str] = None
@@ -68,9 +70,10 @@ class UserUpdate(BaseModel):
 
 class UserResponse(BaseModel):
     """User response model (without password)."""
-    username: str
+    username: str  # Email address (displayed as username)
     email: Optional[str] = None
-    full_name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     disabled: bool = False
     role: str = "user"
     allowed_data_sources: List[str] = []
@@ -101,10 +104,11 @@ class LoginRequest(BaseModel):
 # In-memory user database (for demo - use real DB in production)
 # Password for admin is: ChartAgent2024!
 USERS_DB = {
-    "admin": {
-        "username": "admin",
+    "admin@chartagent.local": {
+        "username": "admin@chartagent.local",
         "email": "admin@chartagent.local",
-        "full_name": "System Administrator",
+        "first_name": "System",
+        "last_name": "Administrator",
         "disabled": False,
         "role": "admin",
         "allowed_data_sources": ["healthlake", "epic", "athena"],
@@ -138,9 +142,10 @@ def get_all_users() -> List[UserResponse]:
     users = []
     for username, user_data in USERS_DB.items():
         users.append(UserResponse(
-            username=user_data["username"],
-            email=user_data.get("email"),
-            full_name=user_data.get("full_name"),
+            username=user_data.get("username", username),
+            email=user_data.get("email", username),
+            first_name=user_data.get("first_name"),
+            last_name=user_data.get("last_name"),
             disabled=user_data.get("disabled", False),
             role=user_data.get("role", "user"),
             allowed_data_sources=user_data.get("allowed_data_sources", ["healthlake"]),
@@ -152,18 +157,31 @@ def get_all_users() -> List[UserResponse]:
 
 def create_user(user_data: UserCreate) -> UserResponse:
     """Create a new user."""
-    if user_data.username in USERS_DB:
-        raise ValueError(f"User '{user_data.username}' already exists")
+    # Normalize email: trim whitespace and lowercase (emails are case-insensitive)
+    normalized_email = user_data.email.strip().lower() if user_data.email else ""
+    if not normalized_email:
+        raise ValueError("Email is required and cannot be empty")
+    
+    # Username defaults to normalized email
+    username = normalized_email
+    
+    if username in USERS_DB:
+        raise ValueError(f"User with email '{username}' already exists")
     
     # Validate data sources
     for source in user_data.allowed_data_sources:
         if source not in AVAILABLE_DATA_SOURCES:
             raise ValueError(f"Invalid data source: {source}")
     
-    USERS_DB[user_data.username] = {
-        "username": user_data.username,
-        "email": user_data.email,
-        "full_name": user_data.full_name,
+    # Normalize name fields (trim whitespace)
+    first_name = user_data.first_name.strip() if user_data.first_name else None
+    last_name = user_data.last_name.strip() if user_data.last_name else None
+    
+    USERS_DB[username] = {
+        "username": username,
+        "email": normalized_email,
+        "first_name": first_name if first_name else None,
+        "last_name": last_name if last_name else None,
         "disabled": False,
         "role": user_data.role,
         "allowed_data_sources": user_data.allowed_data_sources,
@@ -173,9 +191,10 @@ def create_user(user_data: UserCreate) -> UserResponse:
     }
     
     return UserResponse(
-        username=user_data.username,
-        email=user_data.email,
-        full_name=user_data.full_name,
+        username=username,
+        email=normalized_email,
+        first_name=first_name,
+        last_name=last_name,
         disabled=False,
         role=user_data.role,
         allowed_data_sources=user_data.allowed_data_sources,
@@ -190,11 +209,39 @@ def update_user(username: str, user_data: UserUpdate) -> UserResponse:
         raise ValueError(f"User '{username}' not found")
     
     user = USERS_DB[username]
+    final_username = username
     
+    # Handle email/username change
     if user_data.email is not None:
-        user["email"] = user_data.email
-    if user_data.full_name is not None:
-        user["full_name"] = user_data.full_name
+        # Normalize email: trim whitespace and lowercase
+        normalized_email = user_data.email.strip().lower()
+        if not normalized_email:
+            raise ValueError("Email cannot be empty")
+        
+        if normalized_email != username:
+            # Email is changing - check if new email already exists
+            if normalized_email in USERS_DB:
+                raise ValueError(f"User with email '{normalized_email}' already exists")
+            if username == "admin@chartagent.local":
+                raise ValueError("Cannot change admin email")
+            # Move user to new email (username)
+            USERS_DB[normalized_email] = user
+            del USERS_DB[username]
+            user = USERS_DB[normalized_email]
+            user["username"] = normalized_email
+            user["email"] = normalized_email
+            final_username = normalized_email
+        else:
+            # Email is same but may need normalization (update stored value)
+            user["email"] = normalized_email
+    
+    # Normalize name fields (trim whitespace)
+    if user_data.first_name is not None:
+        trimmed_first = (user_data.first_name or "").strip()
+        user["first_name"] = trimmed_first if trimmed_first else None
+    if user_data.last_name is not None:
+        trimmed_last = (user_data.last_name or "").strip()
+        user["last_name"] = trimmed_last if trimmed_last else None
     if user_data.password is not None:
         user["hashed_password"] = get_password_hash(user_data.password)
     if user_data.disabled is not None:
@@ -213,9 +260,10 @@ def update_user(username: str, user_data: UserUpdate) -> UserResponse:
         user["practitioner_name"] = user_data.practitioner_name if user_data.practitioner_name != "" else None
     
     return UserResponse(
-        username=user["username"],
-        email=user.get("email"),
-        full_name=user.get("full_name"),
+        username=final_username,
+        email=user.get("email", final_username),
+        first_name=user.get("first_name"),
+        last_name=user.get("last_name"),
         disabled=user.get("disabled", False),
         role=user.get("role", "user"),
         allowed_data_sources=user.get("allowed_data_sources", ["healthlake"]),
@@ -228,7 +276,7 @@ def delete_user(username: str) -> bool:
     """Delete a user."""
     if username not in USERS_DB:
         raise ValueError(f"User '{username}' not found")
-    if username == "admin":
+    if username == "admin@chartagent.local":
         raise ValueError("Cannot delete the admin user")
     
     del USERS_DB[username]
@@ -236,8 +284,25 @@ def delete_user(username: str) -> bool:
 
 
 def authenticate_user(username: str, password: str) -> Optional[UserInDB]:
-    """Authenticate a user."""
-    user = get_user(username)
+    """Authenticate a user. Username can be email or actual username."""
+    # Normalize input: trim whitespace and lowercase (emails are case-insensitive)
+    normalized_username = username.strip().lower() if username else ""
+    
+    # Try normalized username first
+    user = get_user(normalized_username)
+    
+    # Backward compatibility: "admin" -> "admin@chartagent.local"
+    if not user and normalized_username == "admin":
+        user = get_user("admin@chartagent.local")
+    
+    # Try finding by email if still not found (also normalized)
+    if not user:
+        for key, user_data in USERS_DB.items():
+            stored_email = user_data.get("email", "").strip().lower() if user_data.get("email") else ""
+            if stored_email == normalized_username:
+                user = get_user(key)
+                break
+    
     if not user:
         return None
     if not verify_password(password, user.hashed_password):
