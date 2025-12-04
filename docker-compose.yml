@@ -20,6 +20,7 @@ services:
       - ATHENA_CLIENT_ID=0oa104juaipwtISjQ298
       - ATHENA_PRIVATE_KEY_PATH=/app/keys/epic_private_key.pem
       - ATHENA_PRACTICE_ID=${ATHENA_PRACTICE_ID:-195900}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-chart-agent-secret-key-change-in-production-2024}
       - ENVIRONMENT=development
       - CORS_ORIGINS=["http://localhost:3000","http://localhost:80"]
     volumes:

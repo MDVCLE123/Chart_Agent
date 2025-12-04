@@ -1,7 +1,7 @@
 """FastAPI main application."""
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from app.config import settings
@@ -12,6 +12,10 @@ from app.models import (
 )
 from app.healthlake_client import get_fhir_client, FHIR_SOURCES
 from app.bedrock_service import BedrockService
+from app.auth import (
+    authenticate_user, create_access_token, get_current_user,
+    Token, LoginRequest, User, ACCESS_TOKEN_EXPIRE_MINUTES
+)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -178,6 +182,55 @@ async def root():
         "status": "running",
         "docs": "/docs"
     }
+
+
+# ============== Authentication Endpoints ==============
+
+@app.post("/api/auth/login", response_model=Token)
+async def login(request: LoginRequest):
+    """Authenticate user and return JWT token."""
+    user = authenticate_user(request.username, request.password)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username, "role": user.role},
+        expires_delta=access_token_expires
+    )
+    
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user={
+            "username": user.username,
+            "full_name": user.full_name,
+            "email": user.email,
+            "role": user.role
+        }
+    )
+
+
+@app.get("/api/auth/me")
+async def get_current_user_info(current_user: User = Depends(get_current_user)):
+    """Get current authenticated user info."""
+    return {
+        "username": current_user.username,
+        "full_name": current_user.full_name,
+        "email": current_user.email,
+        "role": current_user.role
+    }
+
+
+@app.post("/api/auth/verify")
+async def verify_token(current_user: User = Depends(get_current_user)):
+    """Verify if token is valid."""
+    return {"valid": True, "username": current_user.username}
 
 
 @app.get("/.well-known/jwks.json")
