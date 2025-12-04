@@ -3,7 +3,7 @@
  */
 
 // FHIR Data Source options
-export type FHIRSource = 'healthlake' | 'epic' | 'demo';
+export type FHIRSource = 'healthlake' | 'epic' | 'athena';
 
 export interface FHIRSourceOption {
   id: FHIRSource;

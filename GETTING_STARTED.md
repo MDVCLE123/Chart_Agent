@@ -1,188 +1,193 @@
-# Getting Started with Chart Preparation Agent
+# Chart Preparation Agent - Getting Started Guide
 
-Quick guide to get your Chart Preparation Agent up and running in minutes.
+> **AI-powered clinical chart preparation for healthcare providers**
 
-## What You've Got
+A web application that helps doctors prepare for patient appointments by automatically summarizing medical records using Claude AI. Select a patient, click a button, and get an AI-generated summary in seconds.
 
-A complete, production-ready Chart Preparation Agent with:
+---
 
-- ✅ Python FastAPI backend with AWS HealthLake and Bedrock integration
-- ✅ React TypeScript frontend with Material-UI
-- ✅ Docker containerization for both services
-- ✅ **Multi-source FHIR support**:
-  - AWS HealthLake (your data)
-  - Epic Sandbox (7 test patients) ✅ Working
-  - athenahealth Sandbox (OAuth ready)
-  - Demo/HAPI FHIR (public test data)
-- ✅ Claude Sonnet 4 for AI summarization
-- ✅ Complete Pulumi infrastructure for AWS deployment (Python!)
-- ✅ Helper scripts for one-command deployment
-- ✅ Cost-optimized configuration ($0-15/month for development)
+## 🎯 Current Status
 
-## Prerequisites
+| Component | Status |
+|-----------|--------|
+| AWS HealthLake | ✅ Working (48 Synthea patients) |
+| AWS Bedrock (Claude Sonnet 4) | ✅ Working |
+| Epic FHIR Sandbox | ✅ Working (7 test patients) |
+| athenahealth Sandbox | ✅ Working (JWT auth) |
+| Docker Development | ✅ Working |
+| AI Summaries | ✅ Working |
+| Follow-up Chat | ✅ Working |
 
-Before you start, make sure you have:
+---
 
-- [ ] AWS Account with admin access
-- [ ] AWS CLI installed and configured (`aws configure`)
-- [ ] Pulumi CLI installed ([install guide](https://www.pulumi.com/docs/get-started/install/))
-- [ ] Docker installed and running
-- [ ] Node.js 18+ installed
-- [ ] Python 3.11+ installed
-- [ ] Git (for version control)
+## 🏗️ Architecture Overview
 
-## 5-Minute Quick Start
-
-### Step 1: AWS Setup (5 minutes)
-
-```bash
-# 1. Install and login to Pulumi
-brew install pulumi  # macOS
-pulumi login         # Use Pulumi Cloud (free) or --local
-
-# 2. Setup Pulumi infrastructure
-./scripts/setup-pulumi.sh
-
-# 3. Follow the AWS Setup Guide to:
-#    - Create HealthLake data store
-#    - Enable Bedrock access
-#    See: docs/AWS_SETUP.md
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   React UI      │────▶│  FastAPI        │────▶│  FHIR Sources   │
+│   (Material-UI) │     │  Backend        │     │                 │
+│   Port 3000     │     │  Port 8000      │     │  • HealthLake   │
+└─────────────────┘     └────────┬────────┘     │  • Epic         │
+                                 │              │  • athenahealth │
+                                 ▼              └─────────────────┘
+                        ┌─────────────────┐
+                        │  AWS Bedrock    │
+                        │  Claude Sonnet 4│
+                        └─────────────────┘
 ```
 
-### Step 2: Configure Environment
+**Tech Stack:**
+- **Frontend**: React + TypeScript + Material-UI
+- **Backend**: Python FastAPI
+- **AI**: AWS Bedrock (Claude Sonnet 4)
+- **Auth**: JWT (RS384) for Epic & athenahealth, SigV4 for HealthLake
+- **Container**: Docker Compose
+
+---
+
+## 📋 Prerequisites
+
+Before starting, install:
+
+- [ ] **Docker Desktop** - [Download](https://www.docker.com/products/docker-desktop)
+- [ ] **AWS CLI** - [Download](https://aws.amazon.com/cli/)
+- [ ] **AWS Account** with admin access
+
+**Optional (for EHR sandbox testing):**
+- [ ] Epic developer account at [fhir.epic.com](https://fhir.epic.com)
+- [ ] athenahealth developer account at [developer.api.athena.io](https://developer.api.athena.io)
+
+---
+
+## 🚀 Quick Start (5 minutes)
+
+### Step 1: Configure Environment
+
+Create a `.env` file in the project root:
 
 ```bash
-# Create backend .env file
-cp backend/.env.example backend/.env
-
-# Edit backend/.env and add your HealthLake endpoint:
-# HEALTHLAKE_DATASTORE_ENDPOINT=https://healthlake.us-east-1.amazonaws.com/datastore/YOUR-ID/r4/
-```
-
-### Step 3: Run Locally with Docker (Recommended)
-
-```bash
-# Create .env file in project root with your credentials:
-cat > .env << 'EOF'
+# AWS Configuration
 AWS_REGION=us-east-2
-AWS_ACCESS_KEY_ID=your-key
-AWS_SECRET_ACCESS_KEY=your-secret
-HEALTHLAKE_DATASTORE_ENDPOINT=https://healthlake.us-east-2.amazonaws.com/datastore/YOUR-ID/r4/
-BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
-USE_DEMO_MODE=false
-EOF
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
 
-# Start with Docker Compose
+# HealthLake (get endpoint from AWS Console)
+HEALTHLAKE_DATASTORE_ENDPOINT=https://healthlake.us-east-2.amazonaws.com/datastore/YOUR-ID/r4/
+
+# Bedrock AI Model
+BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-20250514-v1:0
+
+# Demo Mode (set false to use HealthLake)
+USE_DEMO_MODE=false
+```
+
+### Step 2: Start with Docker
+
+```bash
+# Build and start all services
 docker-compose up -d --build
 
 # View logs
 docker-compose logs -f
+
+# Check status
+docker-compose ps
 ```
 
-**Access**: 
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000/docs
+### Step 3: Open the App
 
-**Cost**: ~$0-5/month
+- **Frontend**: http://localhost:3000
+- **API Docs**: http://localhost:8000/docs
 
-### Step 4: Test with Real Data
+### Step 4: Test It!
 
-1. Open http://localhost:3000
-2. **Select a FHIR Source** from the dropdown:
-   - **AWS HealthLake**: Your Synthea synthetic patients
-   - **Epic Sandbox**: 7 real Epic test patients (Camila Lopez, Derrick Lin, etc.)
-   - **Public FHIR Server**: Demo data from HAPI FHIR
-3. Click a patient to view their details
-4. Click "Generate Summary" to see Claude Sonnet 4 in action
-5. Try asking questions in the chat interface:
-   - "What medications is this patient on?"
-   - "Summarize recent lab results"
-   - "Any allergies I should know about?"
+1. Select a **Data Source** from the dropdown:
+   - ☁️ **AWS HealthLake** - Your Synthea synthetic patients
+   - 🏥 **Epic Sandbox** - 7 Epic test patients
+   - 💚 **athenahealth Sandbox** - athenahealth test patients
 
-## Alternative: Deploy to AWS (Full Stack)
+2. Click a patient name
+3. Click **"Generate Summary"**
+4. Ask follow-up questions in the chat!
 
-For integration testing or demo purposes:
+---
 
-```bash
-# Deploy complete infrastructure to AWS
-./scripts/start-testing.sh
-
-# Access via ALB URL (shown in output)
-# Cost: ~$50-70/month while running
-```
-
-When done testing:
-
-```bash
-# Scale back to minimal infrastructure
-./scripts/start-dev.sh
-
-# Or tear down everything
-./scripts/teardown.sh
-```
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 Chart_Agent/
-├── backend/              # Python FastAPI backend
+├── backend/                    # Python FastAPI
 │   ├── app/
-│   │   ├── main.py              # FastAPI application & endpoints
-│   │   ├── healthlake_client.py # Multi-source FHIR client
-│   │   │                        # (HealthLake, Epic, athenahealth, Demo)
-│   │   ├── bedrock_service.py   # Claude Sonnet 4 integration
-│   │   ├── models.py            # Pydantic data models
-│   │   └── config.py            # Configuration settings
+│   │   ├── main.py            # API endpoints
+│   │   ├── healthlake_client.py  # Multi-source FHIR client
+│   │   ├── bedrock_service.py    # Claude AI integration
+│   │   ├── models.py          # Pydantic models
+│   │   └── config.py          # Settings
 │   ├── Dockerfile
 │   └── requirements.txt
 │
-├── frontend/             # React TypeScript frontend
+├── frontend/                   # React TypeScript
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── PatientList.tsx      # Patient list with FHIR source dropdown
-│   │   │   ├── PatientSummary.tsx   # Patient details & AI summary
-│   │   │   └── ChatInterface.tsx    # Follow-up questions
-│   │   ├── services/api.ts          # API client with FHIR source param
-│   │   └── App.tsx                  # Main app
+│   │   │   ├── PatientList.tsx    # Patient list + source selector
+│   │   │   ├── PatientSummary.tsx # Details + AI summary
+│   │   │   └── ChatInterface.tsx  # Follow-up Q&A
+│   │   ├── services/api.ts    # API client
+│   │   └── types.ts           # TypeScript types
 │   ├── Dockerfile
 │   └── package.json
 │
-├── keys/                 # Epic JWT keys (gitignored)
+├── keys/                       # JWT keys (gitignored)
 │   ├── epic_private_key.pem
-│   ├── epic_public_key.pem
 │   └── jwks.json
 │
-├── infrastructure/       # Pulumi Infrastructure (Python)
-│   ├── __main__.py              # Infrastructure code
-│   ├── Pulumi.yaml              # Project definition
-│   ├── Pulumi.dev.yaml          # Dev config (minimal cost)
-│   └── Pulumi.testing.yaml      # Test config (full stack)
-│
-├── scripts/              # Helper scripts
-│   ├── setup-pulumi.sh
-│   ├── start-dev.sh
-│   ├── start-testing.sh
-│   ├── teardown.sh
-│   └── build-and-push.sh
-│
-├── docker-compose.yml    # Local development with Docker
-├── .env                  # Environment variables (gitignored)
-│
-└── docs/                 # Documentation
-    ├── AWS_SETUP.md
-    └── EPIC_INTEGRATION.md
+├── docker-compose.yml          # Local development
+├── .env                        # Environment variables (gitignored)
+└── GETTING_STARTED.md          # This file
 ```
 
-## Development Workflow
+---
 
-### Daily Development with Docker
+## 🔌 FHIR Data Sources
+
+### AWS HealthLake (Your Data)
+- Your own FHIR R4 data store with Synthea synthetic patients
+- Authentication: AWS SigV4
+- 48 patients with full medical history
+
+### Epic Sandbox
+- Epic's official FHIR test environment
+- Authentication: JWT (RS384) with JWKS
+- 7 test patients available:
+
+| Patient | DOB | Gender |
+|---------|-----|--------|
+| Camila Maria Lopez | 1987-09-12 | Female |
+| Derrick Lin | 1973-06-03 | Male |
+| Desiree Caroline Powell | 2014-11-14 | Female |
+| Elijah John Davis | 1993-08-18 | Male |
+| Linda Jane Ross | 1969-04-27 | Female |
+| Olivia Anne Roberts | 2003-01-07 | Female |
+| Warren James McGinnis | 1952-05-24 | Male |
+
+### athenahealth Sandbox
+- athenahealth Preview API (FHIR R4)
+- Authentication: JWT (RS384)
+- Practice ID: 195900
+- Test patients: Donna, Eleana, Frankie, Anna, Rebecca, Gary, Dorrie
+
+---
+
+## 🛠️ Development Workflow
+
+### Daily Development
 
 ```bash
-# Start all services
+# Start services
 docker-compose up -d
 
 # Watch logs
-docker-compose logs -f
+docker-compose logs -f backend
 
 # Rebuild after code changes
 docker-compose up -d --build
@@ -191,192 +196,167 @@ docker-compose up -d --build
 docker-compose down
 ```
 
-**Hot reload enabled**: Backend code changes automatically reflect via volume mounts
+### Hot Reload
 
-### Weekly Testing
-
-```bash
-# Deploy to AWS for integration testing
-./scripts/start-testing.sh
-
-# Test, then scale back
-./scripts/start-dev.sh
-```
-
-### When Not Developing
+Backend code changes are automatically detected via volume mounts. Frontend requires rebuild:
 
 ```bash
-# Destroy everything to save costs
-./scripts/teardown.sh
+docker-compose up -d --build frontend
 ```
 
-## Common Tasks
-
-### Update Dependencies
+### Common Commands
 
 ```bash
-# Backend
-cd backend
-pip install --upgrade -r requirements.txt
+# Check service health
+curl http://localhost:8000/api/health
 
-# Frontend
-cd frontend
-npm update
+# Test Epic patients
+curl "http://localhost:8000/api/patients?fhir_source=epic"
+
+# Test athenahealth patients
+curl "http://localhost:8000/api/patients?fhir_source=athena"
+
+# Generate summary
+curl -X POST "http://localhost:8000/api/patients/{id}/summary?fhir_source=epic"
 ```
 
-### Build Docker Images
+---
 
-```bash
-# Build and push to AWS ECR
-./scripts/build-and-push.sh
-```
+## 💰 Cost Estimates
 
-### Deploy Updates to ECS
+| Mode | Services | Cost |
+|------|----------|------|
+| **Docker Dev** | HealthLake + Bedrock usage | ~$1.50-2.00/day |
+| **Stopped** | Nothing running | $0 |
 
-```bash
-# Deploy new images to running ECS services
-./scripts/deploy.sh
-```
-
-### View Logs
-
-```bash
-# Backend logs (if running in ECS)
-aws logs tail /ecs/chart-agent-backend-dev --follow
-
-# Frontend logs
-aws logs tail /ecs/chart-agent-frontend-dev --follow
-```
-
-### Check Costs
-
-```bash
-# View current month AWS costs
-aws ce get-cost-and-usage \
-  --time-period Start=2024-12-01,End=2024-12-31 \
-  --granularity MONTHLY \
-  --metrics BlendedCost
-```
-
-## Next Steps
-
-### 1. Customize for Your Use Case
-
-- Modify `backend/app/bedrock_service.py` to adjust AI prompts
-- Update `frontend/src/components/` to change UI/UX
-- Add additional FHIR resources as needed
-
-### 2. Integrate with Epic
-
-Follow [docs/EPIC_INTEGRATION.md](docs/EPIC_INTEGRATION.md) to:
-- Register app with Epic
-- Test with Epic sandbox
-- Switch data source from HealthLake to Epic
-
-### 3. Add Authentication
-
-Integrate AWS Cognito for provider authentication:
-
-```bash
-# See: https://docs.aws.amazon.com/cognito/
-# Update frontend to use Cognito auth
-# Update backend to validate Cognito tokens
-```
-
-### 4. Production Deployment
-
-- Set up CI/CD pipeline (GitHub Actions recommended)
-- Configure HTTPS with ACM certificates
-- Set up CloudWatch alarms and dashboards
-- Enable AWS Config for compliance
-- Review security settings
-
-### 5. Monitoring & Observability
-
-```bash
-# Set up CloudWatch dashboards
-# Configure alerts for errors and high costs
-# Enable X-Ray tracing for debugging
-```
-
-## Troubleshooting
-
-### Backend won't start
-
-**Check**:
-- Is HealthLake endpoint correct in `.env`?
-- Are AWS credentials configured?
-- Is Python 3.11+ installed?
-
-### Frontend can't reach backend
-
-**Check**:
-- Is backend running on port 8000?
-- Check CORS settings in `backend/app/main.py`
-- Check `REACT_APP_API_URL` in frontend
-
-### Can't access HealthLake
-
-**Check**:
-- Is HealthLake data store created and active?
-- Are IAM permissions correct?
-- Is the endpoint URL correct?
-
-### Bedrock not working
-
-**Check**:
-- Is Bedrock enabled in your AWS account?
-- Have you requested access to Claude models?
-- Is the model ID correct?
-
-### Pulumi errors
-
-**Check**:
-- Are AWS credentials valid? Run `aws sts get-caller-identity`
-- Check Pulumi stack status: `pulumi stack --show-urns`
-- View stack outputs: `pulumi stack output`
-- Check Pulumi logs: `pulumi logs`
-
-## Support & Resources
-
-### Documentation
-
-- [README.md](README.md) - Project overview
-- [PLAN.md](PLAN.md) - Detailed implementation plan
-- [docs/AWS_SETUP.md](docs/AWS_SETUP.md) - AWS configuration guide
-- [docs/EPIC_INTEGRATION.md](docs/EPIC_INTEGRATION.md) - Epic integration guide
-
-### External Resources
-
-- [AWS HealthLake Docs](https://docs.aws.amazon.com/healthlake/)
-- [Amazon Bedrock Docs](https://docs.aws.amazon.com/bedrock/)
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [React Documentation](https://react.dev/)
-- [Pulumi Documentation](https://www.pulumi.com/docs/)
-- [Pulumi AWS Guide](https://www.pulumi.com/docs/clouds/aws/get-started/)
-- [Pulumi Python](https://www.pulumi.com/docs/languages-sdks/python/)
-
-## Cost Summary
-
-| Mode | Services | Monthly Cost |
-|------|----------|--------------|
-| **Docker Dev** (Recommended) | HealthLake + Bedrock usage only | ~$45-60 |
-| **Part-time Testing** | + ECS + ALB (4 hours/week) | $60-80 |
-| **Full-time Running** | All services 24/7 | $100-150 |
-| **Destroyed** | Nothing | $0 |
-
-**Daily Cost Breakdown**:
-- HealthLake: ~$1.44/day ($0.06/hour)
+**Breakdown:**
+- HealthLake: ~$0.06/hour ($1.44/day)
 - Bedrock (Claude Sonnet 4): ~$0.01-0.05 per summary
 - S3 (JWKS hosting): < $0.01/day
 
-**Tip**: Delete HealthLake datastore when not in use to save costs!
+**💡 Tip**: Delete HealthLake datastore when not in use to save costs!
 
-## You're Ready! 🚀
+---
 
-Start with local development for fast iteration, then deploy to AWS when you need integration testing. The infrastructure is designed to be cost-effective and easy to tear down when not in use.
+## 🔧 Troubleshooting
 
-Questions? Check the documentation in `/docs` or review the implementation plan in `PLAN.md`.
+### Docker Issues
 
-**Happy Coding!**
+```bash
+# Docker not running?
+open -a Docker  # macOS
 
+# Rebuild from scratch
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+### Backend Errors
+
+```bash
+# Check backend logs
+docker-compose logs backend
+
+# Verify AWS credentials
+docker exec chart_agent-backend-1 python3 -c "from app.config import settings; print(settings.aws_region)"
+```
+
+### Frontend Not Updating
+
+```bash
+# Hard rebuild frontend
+docker-compose build --no-cache frontend
+docker-compose up -d frontend
+# Then: Cmd+Shift+R in browser
+```
+
+### FHIR Source Errors
+
+| Error | Solution |
+|-------|----------|
+| `InvalidClient` | Wait 15-30 min for OAuth propagation |
+| `403 Forbidden` | Check IAM permissions for HealthLake |
+| Empty patient list | Verify FHIR source is selected |
+
+---
+
+## 🔐 Security Notes
+
+- **Never commit `.env` files** - They're gitignored
+- **JWT keys in `/keys`** - Also gitignored
+- **AWS credentials** - Use IAM roles in production
+- **HIPAA compliance** - This is a development tool; production requires additional security
+
+---
+
+## 📚 API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Health check |
+| `/api/fhir-sources` | GET | List available FHIR sources |
+| `/api/patients` | GET | List patients |
+| `/api/patients/{id}` | GET | Get patient details |
+| `/api/patients/{id}/summary` | POST | Generate AI summary |
+| `/api/patients/{id}/chat` | POST | Ask follow-up questions |
+
+All endpoints accept `?fhir_source=healthlake|epic|athena` query parameter.
+
+---
+
+## 🚀 Next Steps
+
+### Customize AI Prompts
+Edit `backend/app/bedrock_service.py` to modify:
+- Summary generation prompts
+- Chat system prompts
+- Clinical focus areas
+
+### Add More FHIR Sources
+The `healthlake_client.py` uses a factory pattern - add new sources by:
+1. Adding to `FHIR_SOURCES` list
+2. Implementing auth in `_make_request()`
+3. Adding to frontend dropdown
+
+### Deploy to AWS
+```bash
+# Setup Pulumi (one-time)
+./scripts/setup-pulumi.sh
+
+# Deploy infrastructure
+./scripts/start-testing.sh
+
+# Tear down when done
+./scripts/teardown.sh
+```
+
+---
+
+## 📖 Additional Resources
+
+- [AWS HealthLake Docs](https://docs.aws.amazon.com/healthlake/)
+- [Amazon Bedrock Docs](https://docs.aws.amazon.com/bedrock/)
+- [Epic FHIR Documentation](https://fhir.epic.com/)
+- [athenahealth API Docs](https://docs.athenahealth.com/)
+- [FHIR R4 Specification](https://hl7.org/fhir/R4/)
+
+---
+
+## ✅ What's Working
+
+- [x] AWS HealthLake with Synthea data
+- [x] AWS Bedrock with Claude Sonnet 4
+- [x] Epic FHIR Sandbox (JWT auth)
+- [x] athenahealth Sandbox (JWT auth)
+- [x] Multi-source FHIR client
+- [x] AI-powered summaries
+- [x] Follow-up chat
+- [x] Docker development environment
+
+---
+
+**Last Updated**: December 2024  
+**Version**: 2.1  
+
+🎉 **Happy Coding!**

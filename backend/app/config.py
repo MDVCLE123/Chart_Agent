@@ -24,11 +24,13 @@ class Settings(BaseSettings):
     epic_token_url: str = "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token"
     epic_private_key_path: str = "/app/keys/epic_private_key.pem"
     
-    # athenahealth FHIR Configuration
+    # athenahealth FHIR Configuration (JWT Authentication - same as Epic)
     athena_fhir_base_url: str = "https://api.preview.platform.athenahealth.com/fhir/r4"
-    athena_client_id: str = "0oa1048xe2u6ejB4j298"
-    athena_client_secret: str = "8pVwAzKNfIkPnWKguK5esYocO_y-NJG9VQNICHnLww8ZhO7YT9TeafPO5-ucS-fT"
+    athena_client_id: str = "0oa104juaipwtISjQ298"  # New JWT-based app
     athena_token_url: str = "https://api.preview.platform.athenahealth.com/oauth2/v1/token"
+    athena_private_key_path: str = "/app/keys/epic_private_key.pem"  # Reuse Epic key
+    athena_practice_id: str = "195900"  # Sandbox practice ID
+    athena_client_secret: str = ""  # Not needed for JWT auth
     
     # Bedrock Configuration
     bedrock_model_id: str = "us.anthropic.claude-sonnet-4-20250514-v1:0"

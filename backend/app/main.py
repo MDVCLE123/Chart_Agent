@@ -49,10 +49,9 @@ async def get_fhir_sources():
     """Get available FHIR data sources."""
     return {
         "sources": [
-            {"id": "healthlake", "name": "AWS HealthLake", "description": "Your HealthLake data store"},
-            {"id": "epic", "name": "Epic Sandbox", "description": "Epic's open FHIR sandbox"},
-            {"id": "athena", "name": "athenahealth Sandbox", "description": "athenahealth Preview API"},
-            {"id": "demo", "name": "Public FHIR Server", "description": "HAPI FHIR public test server"}
+            {"id": "healthlake", "name": "AWS HealthLake", "icon": "☁️", "description": "Your HealthLake data store"},
+            {"id": "epic", "name": "Epic Sandbox", "icon": "🏥", "description": "Epic's FHIR sandbox (7 patients)"},
+            {"id": "athena", "name": "athenahealth Sandbox", "icon": "💚", "description": "athenahealth Preview API"}
         ],
         "default": "healthlake"
     }

@@ -40,7 +40,7 @@ interface PatientListProps {
 const FHIR_SOURCE_OPTIONS = [
   { id: 'healthlake' as FHIRSource, name: 'AWS HealthLake', icon: '☁️' },
   { id: 'epic' as FHIRSource, name: 'Epic Sandbox', icon: '🏥' },
-  { id: 'demo' as FHIRSource, name: 'Public FHIR Server', icon: '🧪' },
+  { id: 'athena' as FHIRSource, name: 'athenahealth Sandbox', icon: '💚' },
 ];
 
 export const PatientList: React.FC<PatientListProps> = ({

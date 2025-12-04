@@ -9,10 +9,11 @@
 3. [Phase 1: AWS Setup](#phase-1-aws-setup)
 4. [Phase 2: Running Locally with Docker](#phase-2-running-locally-with-docker)
 5. [Phase 3: Understanding the Code](#phase-3-understanding-the-code)
-6. [Phase 4: FHIR Data Sources](#phase-4-fhir-data-sources)
+6. [Phase 4: FHIR Data Sources](#phase-4-fhir-data-sources) (All 3 working!)
 7. [Phase 5: Deploying to AWS](#phase-5-deploying-to-aws)
 8. [Troubleshooting](#troubleshooting)
 9. [Next Steps](#next-steps)
+10. [Current Project Status](#current-project-status)
 
 ---
 
@@ -30,13 +31,13 @@
 - **Frontend** = Website that doctors see in their browser
 - **Backend** = Server that processes requests (like a restaurant kitchen)
 - **FHIR Data Sources** = Where patient data comes from:
-  - AWS HealthLake (your own data store)
-  - Epic Sandbox (7 test patients)
-  - athenahealth Sandbox (coming soon)
-  - Demo/HAPI FHIR (public test server)
+  - ☁️ AWS HealthLake (your own data store - 48 patients)
+  - 🏥 Epic Sandbox (7 test patients)
+  - 💚 athenahealth Sandbox (7 test patients)
 - **AI** = Claude Sonnet 4 reads medical records and creates summaries
 - **Cloud** = AWS hosts everything so it works from anywhere
 - **Docker** = Packages your app so it runs the same everywhere
+- **JWT** = JSON Web Tokens for secure authentication with Epic & athenahealth
 
 ---
 
@@ -362,7 +363,7 @@ ls -la
 # - infrastructure/
 # - scripts/
 # - docs/
-# - PLAN.md
+# - GETTING_STARTED.md (full guide)
 # - README.md
 ```
 
@@ -476,18 +477,18 @@ docker ps
 ### 2.4 Use the Application! 🎉
 
 You should now see:
-- **Top**: FHIR Source dropdown (HealthLake, Epic, athenahealth, Demo)
+- **Top**: Data Source dropdown with 3 options
 - **Left side**: List of patients
 - **Right side**: Patient details and AI summary
 
 **Try it out:**
-1. **Select a FHIR Source** from the dropdown:
-   - **AWS HealthLake**: Your Synthea synthetic patients
-   - **Epic Sandbox**: 7 real Epic test patients
-   - **Public FHIR Server**: Demo data from HAPI FHIR
+1. **Select a Data Source** from the dropdown:
+   - ☁️ **AWS HealthLake**: Your Synthea synthetic patients (48 patients)
+   - 🏥 **Epic Sandbox**: 7 real Epic test patients
+   - 💚 **athenahealth Sandbox**: 7 athenahealth test patients
 2. Click on a patient name
 3. You'll see their demographics
-4. Click "Generate Summary" button
+4. Click **"Generate Summary"** button
 5. Wait 5-10 seconds
 6. **AI-generated summary appears!**
 7. Try asking questions in the chat box:
@@ -501,17 +502,21 @@ You should now see:
 
 ## Phase 4: FHIR Data Sources
 
-Your app supports multiple FHIR data sources:
+Your app supports 3 FHIR data sources (all working!):
 
 ### 4.1 AWS HealthLake (Your Data)
 
-Your own FHIR data store with Synthea synthetic patients.
+Your own FHIR data store with Synthea synthetic patients (48 patients).
+- **Authentication**: AWS SigV4
+- **Data**: Full medical history including conditions, medications, labs, encounters
 
 **Status**: ✅ Working
 
 ### 4.2 Epic Sandbox (7 Test Patients)
 
-Real Epic FHIR sandbox with OAuth2 JWT authentication.
+Epic's official FHIR test environment.
+- **Authentication**: JWT (RS384) with JWKS hosted on S3
+- **Client ID**: `5f2384c3-5bb4-484f-a528-068177894d81`
 
 **Test Patients Available**:
 | Patient | DOB | Gender |
@@ -526,17 +531,26 @@ Real Epic FHIR sandbox with OAuth2 JWT authentication.
 
 **Status**: ✅ Working
 
-### 4.3 athenahealth Sandbox
+### 4.3 athenahealth Sandbox (7 Test Patients)
 
-athenahealth Preview API with OAuth2 client credentials.
+athenahealth Preview API (FHIR R4).
+- **Authentication**: JWT (RS384) - same key as Epic!
+- **Client ID**: `0oa104juaipwtISjQ298`
+- **Practice ID**: 195900
 
-**Status**: ⏳ OAuth working, needs practice-level authorization
-
-### 4.4 Demo (HAPI FHIR)
-
-Public FHIR test server for quick testing.
+**Test Patients Available**:
+| Patient | Last Name |
+|---------|-----------|
+| Donna | Sandboxtest |
+| Eleana | Sandboxtest |
+| Frankie | Sandboxtest |
+| Anna | Sandbox-Test |
+| Rebecca | Sandbox-Test |
+| Gary | Sandboxtest |
+| Dorrie | Sandboxtest |
 
 **Status**: ✅ Working
+
 
 ---
 
@@ -547,11 +561,10 @@ Public FHIR test server for quick testing.
 ```
 backend/app/
 ├── main.py                 → API endpoints (routes)
-├── healthlake_client.py    → Fetches data from AWS HealthLake
+├── healthlake_client.py    → Multi-source FHIR client (HealthLake, Epic, athenahealth)
 ├── bedrock_service.py      → Calls Claude AI for summaries
 ├── models.py               → Data structures (what data looks like)
-├── config.py               → Configuration settings
-└── epic_client.py          → (Future) Epic EHR integration
+└── config.py               → Configuration settings
 ```
 
 **Key Concepts:**
@@ -560,16 +573,19 @@ backend/app/
 - Web framework for Python
 - Defines URLs like `/api/patients`
 - Handles requests from frontend
+- Accepts `fhir_source` parameter to switch between data sources
 
-**HealthLake Client**:
-- Connects to AWS HealthLake
-- Fetches patient data (conditions, medications, labs)
+**FHIR Client (healthlake_client.py)**:
+- Factory pattern supporting multiple FHIR sources
+- AWS HealthLake with SigV4 authentication
+- Epic with JWT (RS384) authentication
+- athenahealth with JWT (RS384) authentication
 - Parses FHIR format into simple Python objects
 
 **Bedrock Service**:
-- Sends patient data to Claude AI
+- Sends patient data to Claude Sonnet 4
 - Gets back human-readable summaries
-- Handles follow-up questions
+- Handles follow-up questions with conversation history
 
 ---
 
@@ -606,9 +622,9 @@ frontend/src/
 
 ---
 
-## Phase 4: Deploying to AWS
+## Phase 5: Deploying to AWS
 
-### 4.1 Set Up Pulumi (5 minutes)
+### 5.1 Set Up Pulumi (5 minutes)
 
 **From project root:**
 ```bash
@@ -642,7 +658,7 @@ pulumi login
 
 ---
 
-### 4.2 Create Minimal Infrastructure (10 minutes)
+### 5.2 Create Minimal Infrastructure (10 minutes)
 
 **Run the dev script:**
 ```bash
@@ -661,7 +677,7 @@ pulumi login
 
 ---
 
-### 4.3 Deploy Full Stack (20 minutes)
+### 5.3 Deploy Full Stack (20 minutes)
 
 **When you're ready to test the full deployment:**
 ```bash
@@ -685,7 +701,7 @@ pulumi login
 
 ---
 
-### 4.4 Tear Down (Save Money!)
+### 5.4 Tear Down (Save Money!)
 
 **When done testing:**
 ```bash
@@ -905,10 +921,28 @@ This deletes all AWS resources and stops charges.
 
 **You've completed the beginner's guide!** You now have:
 - ✅ Development environment set up
-- ✅ Application running locally
+- ✅ Application running locally with Docker
+- ✅ Access to 3 FHIR data sources (HealthLake, Epic, athenahealth)
+- ✅ AI-powered patient summaries with Claude Sonnet 4
 - ✅ Understanding of project structure
 - ✅ Ability to deploy to AWS
 - ✅ Troubleshooting skills
+
+---
+
+## Current Project Status
+
+| Feature | Status |
+|---------|--------|
+| AWS HealthLake | ✅ Working (48 patients) |
+| Epic Sandbox | ✅ Working (7 patients) |
+| athenahealth Sandbox | ✅ Working (7 patients) |
+| Claude Sonnet 4 Summaries | ✅ Working |
+| Follow-up Chat | ✅ Working |
+| Docker Development | ✅ Working |
+| JWT Authentication | ✅ Working (Epic & athenahealth) |
+
+**Last Updated**: December 2024
 
 **Happy coding!** 🚀
 

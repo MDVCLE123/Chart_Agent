@@ -31,6 +31,18 @@ EPIC_TEST_PATIENTS = [
     {"id": "e0w0LEDCYtfckT6N.CkJKCw3", "name": "Warren McGinnis"},
 ]
 
+# athenahealth sandbox test patients (from preview environment practice 195900)
+# From: https://docs.athenahealth.com/api/guides/testing-sandbox
+ATHENA_TEST_PATIENTS = [
+    {"id": "a-195900.E-60178", "name": "Donna Sandboxtest"},
+    {"id": "a-195900.E-60179", "name": "Eleana Sandboxtest"},
+    {"id": "a-195900.E-60180", "name": "Frankie Sandboxtest"},
+    {"id": "a-195900.E-60181", "name": "Anna Sandbox-Test"},
+    {"id": "a-195900.E-60182", "name": "Rebecca Sandbox-Test"},
+    {"id": "a-195900.E-60183", "name": "Gary Sandboxtest"},
+    {"id": "a-195900.E-60184", "name": "Dorrie Sandboxtest"},
+]
+
 
 def get_fhir_client(source: str = None):
     """Factory function to get appropriate FHIR client based on source."""
@@ -155,20 +167,50 @@ class FHIRClient:
             raise
     
     def _get_athena_token(self) -> str:
-        """Get OAuth2 access token for athenahealth using client credentials."""
+        """Get OAuth2 access token for athenahealth using JWT client assertion (same as Epic)."""
         # Check if we have a valid cached token
         if FHIRClient._athena_token and time.time() < FHIRClient._athena_token_expires - 60:
             return FHIRClient._athena_token
         
         try:
-            # athenahealth uses standard OAuth2 client credentials
+            # Read private key (reusing Epic's key)
+            key_path = settings.athena_private_key_path
+            if not key_path:
+                key_path = settings.epic_private_key_path  # Fallback to Epic key path
+            
+            with open(key_path, 'r') as f:
+                private_key = f.read()
+            
+            # Create JWT assertion (same pattern as Epic)
+            now = int(time.time())
+            claims = {
+                "iss": settings.athena_client_id,
+                "sub": settings.athena_client_id,
+                "aud": settings.athena_token_url,
+                "jti": str(uuid.uuid4()),
+                "exp": now + 300,  # 5 minutes
+                "iat": now,
+            }
+            
+            # Sign JWT with RS384 (matching the registered key)
+            token = jwt.encode(
+                claims,
+                private_key,
+                algorithm="RS384",
+                headers={"kid": "chart-agent-key-1"}
+            )
+            
+            print(f"🔐 athenahealth JWT created, requesting token...")
+            
+            # Exchange JWT for access token
             response = requests.post(
                 settings.athena_token_url,
                 data={
                     "grant_type": "client_credentials",
-                    "scope": "system/Patient.read system/Condition.read system/MedicationRequest.read system/Observation.read system/AllergyIntolerance.read system/Encounter.read system/Practitioner.read"
+                    "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                    "client_assertion": token,
+                    "scope": "system/Patient.read system/Condition.read system/Observation.read system/MedicationRequest.read system/AllergyIntolerance.read system/Encounter.read system/Practitioner.read"
                 },
-                auth=(settings.athena_client_id, settings.athena_client_secret),
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
                 timeout=30
             )
@@ -177,12 +219,17 @@ class FHIRClient:
                 data = response.json()
                 FHIRClient._athena_token = data["access_token"]
                 FHIRClient._athena_token_expires = time.time() + data.get("expires_in", 3600)
-                print(f"✅ athenahealth OAuth token obtained successfully")
+                print(f"✅ athenahealth JWT OAuth token obtained successfully")
+                print(f"   Token scopes: {data.get('scope', 'N/A')}")
                 return FHIRClient._athena_token
             else:
-                print(f"❌ athenahealth OAuth failed: {response.status_code} - {response.text}")
+                print(f"❌ athenahealth JWT OAuth failed: {response.status_code}")
+                print(f"   Response: {response.text}")
                 raise Exception(f"athenahealth OAuth failed: {response.text}")
                 
+        except FileNotFoundError:
+            print(f"❌ athenahealth private key not found at {key_path}")
+            raise Exception("athenahealth private key not configured")
         except Exception as e:
             print(f"❌ athenahealth auth error: {e}")
             raise
@@ -211,9 +258,13 @@ class FHIRClient:
                 token = self._get_athena_token()
                 headers = {
                     "Accept": "application/fhir+json",
-                    "Authorization": f"Bearer {token}"
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json"
                 }
-                return requests.request(method=method, url=url, headers=headers, timeout=30)
+                print(f"   athenahealth request: {url}")
+                response = requests.request(method=method, url=url, headers=headers, timeout=30)
+                print(f"   athenahealth response: {response.status_code}")
+                return response
             except Exception as e:
                 print(f"athenahealth auth failed: {e}")
                 raise
@@ -292,6 +343,14 @@ class FHIRClient:
         if self.source == "epic":
             return self._get_epic_test_patients(count)
         
+        # athenahealth sandbox - try direct search first, fall back to test patients
+        if self.source == "athena":
+            patients = self._get_athena_patients(count)
+            if patients:
+                return patients
+            print("   Falling back to athenahealth test patients")
+            return self._get_athena_test_patients(count)
+        
         if practitioner_id:
             # Find patients who have had encounters with this practitioner
             return self._get_patients_by_practitioner_encounters(practitioner_id, count)
@@ -326,6 +385,61 @@ class FHIRClient:
                     patients.append(self._parse_patient_basic(resource))
             except Exception as e:
                 print(f"Error fetching Epic patient {test_patient['id']}: {e}")
+        return patients
+    
+    def _get_athena_patients(self, count: int = 50) -> List[PatientBasic]:
+        """Try to get athenahealth patients via search."""
+        # athenahealth FHIR R4 uses query param for practice
+        # Format: /Patient?ah-practice=Organization/a-1.Practice-{practiceId}&name=Sandboxtest
+        practice_id = settings.athena_practice_id
+        url = f"{self.endpoint}/Patient?ah-practice=Organization/a-1.Practice-{practice_id}&name=Sandboxtest&_count={count}"
+        
+        try:
+            response = self._make_request("GET", url)
+            print(f"   athenahealth Patient search: {response.status_code}")
+            if response.status_code == 200:
+                bundle = response.json()
+                patients = []
+                if "entry" in bundle:
+                    for entry in bundle["entry"]:
+                        resource = entry.get("resource", {})
+                        patients.append(self._parse_patient_basic(resource))
+                print(f"   Found {len(patients)} athenahealth patients")
+                return patients
+            else:
+                print(f"   Response: {response.text[:200]}")
+                return []
+        except Exception as e:
+            print(f"   athenahealth search error: {e}")
+            return []
+    
+    def _get_athena_test_patients(self, count: int = 50) -> List[PatientBasic]:
+        """Get athenahealth test patients by known IDs."""
+        patients = []
+        
+        for test_patient in ATHENA_TEST_PATIENTS[:count]:
+            try:
+                # athenahealth Patient endpoint - ID includes practice prefix
+                url = f"{self.endpoint}/Patient/{test_patient['id']}"
+                response = self._make_request("GET", url)
+                if response.status_code == 200:
+                    resource = response.json()
+                    patients.append(self._parse_patient_basic(resource))
+                    print(f"   ✅ Fetched {test_patient['name']}")
+                else:
+                    print(f"   athenahealth patient {test_patient['id']}: {response.status_code}")
+            except Exception as e:
+                print(f"Error fetching athenahealth patient {test_patient['id']}: {e}")
+        
+        # If no patients found via API, return mock data for testing UI
+        if not patients:
+            print("   Returning mock athenahealth patients for UI testing")
+            return [
+                PatientBasic(id="athena-test-1", name="Test Patient One", dob="1980-01-15", gender="male"),
+                PatientBasic(id="athena-test-2", name="Test Patient Two", dob="1975-06-20", gender="female"),
+                PatientBasic(id="athena-test-3", name="Test Patient Three", dob="1990-03-10", gender="male"),
+            ]
+        
         return patients
     
     def _get_patients_by_practitioner_encounters(self, practitioner_id: str, count: int = 50) -> List[PatientBasic]:

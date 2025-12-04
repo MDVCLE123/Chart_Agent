@@ -126,10 +126,9 @@ Chart_Agent/
 
 ## Documentation
 
-- [Implementation Plan](PLAN.md) - Detailed implementation guide
-- [AWS Setup Guide](docs/AWS_SETUP.md) - Step-by-step AWS configuration
-- [Local Development](docs/LOCAL_DEV.md) - Running locally
-- [Deployment Guide](docs/DEPLOYMENT.md) - Deploying to AWS
+- [Getting Started](GETTING_STARTED.md) - Quick start & full guide
+- [Beginner's Guide](BEGINNER_GUIDE.md) - Step-by-step for new developers
+- [AWS Setup Guide](docs/AWS_SETUP.md) - AWS configuration
 
 ## Cost Management
 
@@ -150,7 +149,7 @@ Chart_Agent/
 
 ## Support & Contribution
 
-See [PLAN.md](PLAN.md) for detailed implementation phases and architecture decisions.
+See [GETTING_STARTED.md](GETTING_STARTED.md) for detailed setup and architecture information.
 
 ## License
 
