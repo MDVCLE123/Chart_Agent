@@ -34,6 +34,8 @@ interface PatientListProps {
   selectedPatientId?: string;
   fhirSource: FHIRSource;
   onFhirSourceChange: (source: FHIRSource) => void;
+  allowedDataSources?: string[];
+  defaultPractitionerId?: string;
 }
 
 // FHIR source options with display info
@@ -48,14 +50,22 @@ export const PatientList: React.FC<PatientListProps> = ({
   selectedPatientId,
   fhirSource,
   onFhirSourceChange,
+  allowedDataSources = ['healthlake', 'epic', 'athena'],
+  defaultPractitionerId,
 }) => {
   const [patients, setPatients] = useState<PatientBasic[]>([]);
   const [practitioners, setPractitioners] = useState<PractitionerBasic[]>([]);
-  const [selectedPractitioner, setSelectedPractitioner] = useState<string>('');
+  const [selectedPractitioner, setSelectedPractitioner] = useState<string>(defaultPractitionerId || '');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [loadingPractitioners, setLoadingPractitioners] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [practitionerInitialized, setPractitionerInitialized] = useState(false);
+
+  // Filter data sources based on user permissions
+  const availableSourceOptions = FHIR_SOURCE_OPTIONS.filter(
+    (option) => allowedDataSources.includes(option.id)
+  );
 
   // Filter patients by search term
   const filteredPatients = patients.filter((patient) =>
@@ -64,11 +74,27 @@ export const PatientList: React.FC<PatientListProps> = ({
 
   // Load data when fhirSource changes
   useEffect(() => {
-    setSelectedPractitioner('');
+    // Only reset practitioner if not using default
+    if (!defaultPractitionerId) {
+      setSelectedPractitioner('');
+    }
     setSearchTerm('');
+    setPractitionerInitialized(false);
     loadPractitioners();
-    loadPatients();
+    loadPatients(defaultPractitionerId);
   }, [fhirSource]);
+
+  // Set default practitioner once practitioners are loaded
+  useEffect(() => {
+    if (!practitionerInitialized && defaultPractitionerId && practitioners.length > 0) {
+      const practitionerExists = practitioners.some((p) => p.id === defaultPractitionerId);
+      if (practitionerExists) {
+        setSelectedPractitioner(defaultPractitionerId);
+        loadPatients(defaultPractitionerId);
+      }
+      setPractitionerInitialized(true);
+    }
+  }, [practitioners, defaultPractitionerId, practitionerInitialized]);
 
   useEffect(() => {
     loadPatients(selectedPractitioner || undefined);
@@ -148,7 +174,7 @@ export const PatientList: React.FC<PatientListProps> = ({
               </InputAdornment>
             }
           >
-            {FHIR_SOURCE_OPTIONS.map((option) => (
+            {availableSourceOptions.map((option) => (
               <MenuItem key={option.id} value={option.id}>
                 {option.icon} {option.name}
               </MenuItem>

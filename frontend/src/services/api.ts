@@ -13,6 +13,29 @@ const api = axios.create({
   },
 });
 
+// Add auth token interceptor - includes JWT in all requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('auth_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Handle 401 responses - redirect to login if token is invalid
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Clear stored auth data and reload to trigger login
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+      window.location.reload();
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Helper to add fhir_source to URL params
 const addFhirSource = (url: string, fhirSource?: FHIRSource): string => {
   if (fhirSource) {

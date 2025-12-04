@@ -1,7 +1,7 @@
 /**
  * Main App Component
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -17,12 +17,13 @@ import {
   Chip,
   CircularProgress,
 } from '@mui/material';
-import { LocalHospital, Logout, Person } from '@mui/icons-material';
+import { LocalHospital, Logout, Person, Settings } from '@mui/icons-material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PatientList } from './components/PatientList';
 import { PatientSummary } from './components/PatientSummary';
 import { ChatInterface } from './components/ChatInterface';
 import { LoginScreen } from './components/LoginScreen';
+import { SettingsPage } from './components/SettingsPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { FHIRSource } from './types';
 
@@ -62,10 +63,17 @@ const queryClient = new QueryClient({
 
 // Main app content (shown when authenticated)
 const AppContent: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [selectedPatientName, setSelectedPatientName] = useState<string>('');
-  const [fhirSource, setFhirSource] = useState<FHIRSource>('healthlake');
+  const [showSettings, setShowSettings] = useState(false);
+  
+  // Initialize fhirSource from user's allowed sources
+  const defaultSource = (user?.allowed_data_sources?.[0] || 'healthlake') as FHIRSource;
+  const [fhirSource, setFhirSource] = useState<FHIRSource>(defaultSource);
+  
+  // Get default practitioner from user
+  const defaultPractitionerId = user?.practitioner_id || undefined;
 
   const handlePatientSelect = (patientId: string, patientName?: string) => {
     setSelectedPatientId(patientId);
@@ -73,11 +81,71 @@ const AppContent: React.FC = () => {
   };
 
   const handleFhirSourceChange = (source: FHIRSource) => {
-    setFhirSource(source);
-    // Clear patient selection when source changes
-    setSelectedPatientId(null);
-    setSelectedPatientName('');
+    // Only allow sources the user has access to
+    if (user?.allowed_data_sources?.includes(source)) {
+      setFhirSource(source);
+      // Clear patient selection when source changes
+      setSelectedPatientId(null);
+      setSelectedPatientName('');
+    }
   };
+
+  // Reset state when returning from settings
+  useEffect(() => {
+    if (!showSettings) {
+      // Refresh to apply any user changes
+      setSelectedPatientId(null);
+      setSelectedPatientName('');
+    }
+  }, [showSettings]);
+
+  if (showSettings) {
+    return (
+      <Box sx={{ flexGrow: 1 }}>
+        {/* App Bar */}
+        <AppBar position="static">
+          <Toolbar>
+            <LocalHospital sx={{ mr: 2 }} />
+            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+              Chart Preparation Agent
+            </Typography>
+            
+            {/* User Info */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Chip
+                icon={<Person sx={{ fontSize: 18 }} />}
+                label={user?.full_name || user?.username}
+                size="small"
+                sx={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                  color: 'white',
+                  '& .MuiChip-icon': { color: 'white' },
+                }}
+              />
+              <Tooltip title="Sign Out">
+                <IconButton
+                  color="inherit"
+                  onClick={logout}
+                  sx={{
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                    },
+                  }}
+                >
+                  <Logout />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          </Toolbar>
+        </AppBar>
+
+        {/* Settings Content */}
+        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+          <SettingsPage onBack={() => setShowSettings(false)} />
+        </Container>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ flexGrow: 1 }}>
@@ -101,15 +169,29 @@ const AppContent: React.FC = () => {
                 '& .MuiChip-icon': { color: 'white' },
               }}
             />
-            <Typography variant="body2" sx={{ opacity: 0.9 }}>
+            <Typography variant="body2" sx={{ opacity: 0.9, display: { xs: 'none', md: 'block' } }}>
               AI-Powered Healthcare Documentation
             </Typography>
+            {isAdmin && (
+              <Tooltip title="Settings">
+                <IconButton
+                  color="inherit"
+                  onClick={() => setShowSettings(true)}
+                  sx={{
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                    },
+                  }}
+                >
+                  <Settings />
+                </IconButton>
+              </Tooltip>
+            )}
             <Tooltip title="Sign Out">
               <IconButton
                 color="inherit"
                 onClick={logout}
                 sx={{
-                  ml: 1,
                   '&:hover': {
                     backgroundColor: 'rgba(255, 255, 255, 0.1)',
                   },
@@ -134,6 +216,8 @@ const AppContent: React.FC = () => {
               selectedPatientId={selectedPatientId || undefined}
               fhirSource={fhirSource}
               onFhirSourceChange={handleFhirSourceChange}
+              allowedDataSources={user?.allowed_data_sources || ['healthlake']}
+              defaultPractitionerId={defaultPractitionerId}
             />
           </Grid>
 

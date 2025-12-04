@@ -13,8 +13,11 @@ from app.models import (
 from app.healthlake_client import get_fhir_client, FHIR_SOURCES
 from app.bedrock_service import BedrockService
 from app.auth import (
-    authenticate_user, create_access_token, get_current_user,
-    Token, LoginRequest, User, ACCESS_TOKEN_EXPIRE_MINUTES
+    authenticate_user, create_access_token, get_current_user, require_admin,
+    Token, LoginRequest, User, ACCESS_TOKEN_EXPIRE_MINUTES,
+    UserCreate, UserUpdate, UserResponse,
+    get_all_users, create_user, update_user, delete_user,
+    AVAILABLE_DATA_SOURCES
 )
 
 # Initialize FastAPI app
@@ -64,16 +67,24 @@ async def get_fhir_sources():
 @app.get("/api/practitioners", response_model=PractitionerListResponse)
 async def get_practitioners(
     count: int = 50,
-    fhir_source: Optional[str] = Query(None, description="FHIR source: healthlake, epic, or demo")
+    fhir_source: Optional[str] = Query(None, description="FHIR source: healthlake, epic, or demo"),
+    current_user: User = Depends(get_current_user)
 ):
     """Get list of practitioners."""
     try:
+        # Validate user has access to requested data source
+        source = fhir_source or "healthlake"
+        if source not in current_user.allowed_data_sources:
+            raise HTTPException(status_code=403, detail=f"Access denied to data source: {source}")
+        
         client = get_fhir_client(fhir_source)
         practitioners = client.search_practitioners(count=count)
         return PractitionerListResponse(
             practitioners=practitioners,
             total=len(practitioners)
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching practitioners: {str(e)}")
 
@@ -82,16 +93,24 @@ async def get_practitioners(
 async def get_patients(
     count: int = 50, 
     practitioner_id: Optional[str] = None,
-    fhir_source: Optional[str] = Query(None, description="FHIR source: healthlake, epic, or demo")
+    fhir_source: Optional[str] = Query(None, description="FHIR source: healthlake, epic, or demo"),
+    current_user: User = Depends(get_current_user)
 ):
     """Get list of patients, optionally filtered by practitioner."""
     try:
+        # Validate user has access to requested data source
+        source = fhir_source or "healthlake"
+        if source not in current_user.allowed_data_sources:
+            raise HTTPException(status_code=403, detail=f"Access denied to data source: {source}")
+        
         client = get_fhir_client(fhir_source)
         patients = client.search_patients(count=count, practitioner_id=practitioner_id)
         return PatientListResponse(
             patients=patients,
             total=len(patients)
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching patients: {str(e)}")
 
@@ -99,13 +118,21 @@ async def get_patients(
 @app.get("/api/patients/{patient_id}", response_model=PatientData)
 async def get_patient_data(
     patient_id: str,
-    fhir_source: Optional[str] = Query(None, description="FHIR source: healthlake, epic, or demo")
+    fhir_source: Optional[str] = Query(None, description="FHIR source: healthlake, epic, or demo"),
+    current_user: User = Depends(get_current_user)
 ):
     """Get complete data for a specific patient."""
     try:
+        # Validate user has access to requested data source
+        source = fhir_source or "healthlake"
+        if source not in current_user.allowed_data_sources:
+            raise HTTPException(status_code=403, detail=f"Access denied to data source: {source}")
+        
         client = get_fhir_client(fhir_source)
         patient_data = client.get_patient_data(patient_id)
         return patient_data
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -115,10 +142,16 @@ async def get_patient_data(
 @app.post("/api/patients/{patient_id}/summary", response_model=SummaryResponse)
 async def generate_summary(
     patient_id: str,
-    fhir_source: Optional[str] = Query(None, description="FHIR source: healthlake, epic, or demo")
+    fhir_source: Optional[str] = Query(None, description="FHIR source: healthlake, epic, or demo"),
+    current_user: User = Depends(get_current_user)
 ):
     """Generate AI summary for patient."""
     try:
+        # Validate user has access to requested data source
+        source = fhir_source or "healthlake"
+        if source not in current_user.allowed_data_sources:
+            raise HTTPException(status_code=403, detail=f"Access denied to data source: {source}")
+        
         # Get patient data from specified source
         client = get_fhir_client(fhir_source)
         patient_data = client.get_patient_data(patient_id)
@@ -131,6 +164,8 @@ async def generate_summary(
             summary=summary,
             generated_at=datetime.now()
         )
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -141,10 +176,16 @@ async def generate_summary(
 async def chat(
     patient_id: str, 
     request: ChatRequest,
-    fhir_source: Optional[str] = Query(None, description="FHIR source: healthlake, epic, or demo")
+    fhir_source: Optional[str] = Query(None, description="FHIR source: healthlake, epic, or demo"),
+    current_user: User = Depends(get_current_user)
 ):
     """Answer follow-up question about patient."""
     try:
+        # Validate user has access to requested data source
+        source = fhir_source or "healthlake"
+        if source not in current_user.allowed_data_sources:
+            raise HTTPException(status_code=403, detail=f"Access denied to data source: {source}")
+        
         # Get patient data from specified source
         client = get_fhir_client(fhir_source)
         patient_data = client.get_patient_data(patient_id)
@@ -167,6 +208,8 @@ async def chat(
             answer=answer,
             conversation_history=updated_history
         )
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -211,7 +254,10 @@ async def login(request: LoginRequest):
             "username": user.username,
             "full_name": user.full_name,
             "email": user.email,
-            "role": user.role
+            "role": user.role,
+            "allowed_data_sources": user.allowed_data_sources,
+            "practitioner_id": user.practitioner_id,
+            "practitioner_name": user.practitioner_name
         }
     )
 
@@ -223,7 +269,10 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         "username": current_user.username,
         "full_name": current_user.full_name,
         "email": current_user.email,
-        "role": current_user.role
+        "role": current_user.role,
+        "allowed_data_sources": current_user.allowed_data_sources,
+        "practitioner_id": current_user.practitioner_id,
+        "practitioner_name": current_user.practitioner_name
     }
 
 
@@ -231,6 +280,58 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
 async def verify_token(current_user: User = Depends(get_current_user)):
     """Verify if token is valid."""
     return {"valid": True, "username": current_user.username}
+
+
+# ============== User Management Endpoints (Admin Only) ==============
+
+@app.get("/api/admin/users", response_model=List[UserResponse])
+async def list_users(current_user: User = Depends(require_admin)):
+    """Get list of all users (admin only)."""
+    return get_all_users()
+
+
+@app.post("/api/admin/users", response_model=UserResponse)
+async def create_new_user(user_data: UserCreate, current_user: User = Depends(require_admin)):
+    """Create a new user (admin only)."""
+    try:
+        return create_user(user_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/admin/users/{username}", response_model=UserResponse)
+async def update_existing_user(
+    username: str, 
+    user_data: UserUpdate, 
+    current_user: User = Depends(require_admin)
+):
+    """Update an existing user (admin only)."""
+    try:
+        return update_user(username, user_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/admin/users/{username}")
+async def delete_existing_user(username: str, current_user: User = Depends(require_admin)):
+    """Delete a user (admin only)."""
+    try:
+        delete_user(username)
+        return {"message": f"User '{username}' deleted successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/admin/data-sources")
+async def get_available_data_sources(current_user: User = Depends(require_admin)):
+    """Get list of available data sources for user permissions."""
+    return {
+        "sources": [
+            {"id": "healthlake", "name": "AWS HealthLake", "icon": "☁️"},
+            {"id": "epic", "name": "Epic Sandbox", "icon": "🏥"},
+            {"id": "athena", "name": "athenahealth", "icon": "💚"}
+        ]
+    }
 
 
 @app.get("/.well-known/jwks.json")

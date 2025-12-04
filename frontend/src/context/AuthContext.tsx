@@ -9,8 +9,10 @@ interface AuthContextType {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isAdmin: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
   error: string | null;
 }
 
@@ -75,14 +77,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setUser(null);
   };
 
+  const refreshUser = async () => {
+    try {
+      const updatedUser = await authService.getCurrentUser();
+      localStorage.setItem('auth_user', JSON.stringify(updatedUser));
+      setUser(updatedUser);
+    } catch (err) {
+      console.error('Failed to refresh user:', err);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
         user,
         isAuthenticated: !!user,
         isLoading,
+        isAdmin: user?.role === 'admin',
         login,
         logout,
+        refreshUser,
         error,
       }}
     >
