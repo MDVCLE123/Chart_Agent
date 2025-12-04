@@ -98,7 +98,9 @@ class UserResponse(BaseModel):
 
 
 def _get_secret_hash(username: str) -> str:
-    """Calculate Cognito secret hash."""
+    """Calculate Cognito secret hash. Only used for clients with secrets."""
+    if not COGNITO_CLIENT_SECRET:
+        raise ValueError("Cannot calculate secret hash: COGNITO_CLIENT_SECRET not set")
     message = username + COGNITO_CLIENT_ID
     dig = hmac.new(
         COGNITO_CLIENT_SECRET.encode('utf-8'),
@@ -153,14 +155,20 @@ def _parse_user_attributes(attributes: list) -> dict:
 def authenticate_user(email: str, password: str) -> Optional[dict]:
     """Authenticate user with Cognito."""
     try:
+        # Build auth parameters
+        auth_params = {
+            'USERNAME': email,
+            'PASSWORD': password,
+        }
+        
+        # Only include SECRET_HASH if client secret is configured (not a public client)
+        if COGNITO_CLIENT_SECRET:
+            auth_params['SECRET_HASH'] = _get_secret_hash(email)
+        
         response = cognito_client.initiate_auth(
             ClientId=COGNITO_CLIENT_ID,
             AuthFlow='USER_PASSWORD_AUTH',
-            AuthParameters={
-                'USERNAME': email,
-                'PASSWORD': password,
-                'SECRET_HASH': _get_secret_hash(email)
-            }
+            AuthParameters=auth_params
         )
         
         auth_result = response.get('AuthenticationResult', {})
